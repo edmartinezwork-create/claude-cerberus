@@ -34,11 +34,8 @@ string grpGeneral    = "=== General Settings ==="
 bool   showInfoTable = input.bool(true, "Show Info Table", group=grpGeneral, display=INPUT_DISPLAY)
 
 // --- Pivot Detection ---
-string grpPivot        = "=== Pivot Detection ==="
-int    pivotLen        = input.int(5, "Pivot Length", minval=2, maxval=50, group=grpPivot, display=INPUT_DISPLAY)
-bool   showPivotLabels = input.bool(true, "Show Pivot Labels", group=grpPivot, display=INPUT_DISPLAY)
-color  pivotHighColor  = input.color(color.red, "Pivot High Color", group=grpPivot, display=INPUT_DISPLAY)
-color  pivotLowColor   = input.color(color.green, "Pivot Low Color", group=grpPivot, display=INPUT_DISPLAY)
+string grpPivot = "=== Pivot Detection ==="
+int    pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=grpPivot, display=INPUT_DISPLAY, tooltip="Controls swing detection sensitivity for Fibonacci anchoring")
 
 // --- Fibonacci Set 1 ---
 string grpFib1        = "=== Fibonacci Set 1 ==="
@@ -223,8 +220,6 @@ var array<line>  fib2Lines  = array.new<line>()
 var array<label> fib2Labels = array.new<label>()
 var array<box>   fib2Zones  = array.new<box>()
 
-// Pivot labels
-var array<label> pivotLabels = array.new<label>()
 
 // Wave labels
 var int   waveCount      = 1
@@ -557,32 +552,6 @@ if showWaveLabels
 if waveLabels.size() > 20
     label.delete(waveLabels.shift())
 
-// ============================================================================
-// DRAW PIVOT LABELS
-// ============================================================================
-if showPivotLabels
-    if newPivotHigh
-        label phLabel = label.new(
-             lastPivotHighBar, lastPivotHigh, "PH",
-             style=label.style_label_down,
-             color=color.new(pivotHighColor, 60),
-             textcolor=pivotHighColor,
-             size=size.tiny
-        )
-        pivotLabels.push(phLabel)
-
-    if newPivotLow
-        label plLabel = label.new(
-             lastPivotLowBar, lastPivotLow, "PL",
-             style=label.style_label_up,
-             color=color.new(pivotLowColor, 60),
-             textcolor=pivotLowColor,
-             size=size.tiny
-        )
-        pivotLabels.push(plLabel)
-
-if pivotLabels.size() > 50
-    label.delete(pivotLabels.shift())
 
 // ============================================================================
 // FIB 1 STATE, INVALIDATION, AUTO RE-ANCHOR, DRAW

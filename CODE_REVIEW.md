@@ -188,13 +188,31 @@ line.style lineStyleToUse = lvl.isExtension ? ...
 
 ---
 
+### 11. Redundant Pivot Labels Feature
+
+**Issue**: The Pivot Labels feature (showing "PH"/"PL" at swing points) duplicates Elliott Wave labels:
+- Both trigger on `newPivotHigh` / `newPivotLow`
+- Both place labels at identical coordinates
+- Results in overlapping labels when both enabled
+
+**Analysis**: In DragonTraderz methodology, "pivots" refers to **decision zones** (Fibonacci levels like 0.618, 0.786, Golden Pocket) where price may bounce or break - not swing high/low markers.
+
+**Fix**: Removed Pivot Labels feature entirely. The underlying pivot detection logic is retained as it's needed for:
+- Fibonacci level anchoring
+- Elliott Wave labeling
+- Broadening formation detection
+
+**Status**: Feature removed. Pivot Length input retained with tooltip explaining its purpose.
+
+---
+
 ## Performance Considerations
 
 ### Drawing Object Management
 The script properly manages drawing objects by:
 - Clearing arrays before redrawing
-- Limiting pivot labels to 50
 - Limiting wave labels to 20
+- Limiting broadening formation drawings to current state only
 
 ### Calculation Efficiency
 - Most drawing operations only occur on `barstate.islast`
