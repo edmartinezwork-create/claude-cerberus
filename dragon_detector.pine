@@ -1,6 +1,6 @@
 // This Pine Script code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // Dragon Detector and Forecast - Elliott Wave Enhanced
-// Version 10 | Pine Script v6 Compliant
+// Version 11 | Pine Script v6 Compliant with Projection Paths
 //
 // NOTE: Elliott Wave labeling is simplified and does not implement full EW validation rules.
 // For proper Elliott Wave analysis, additional validation would be needed:
@@ -14,6 +14,7 @@ indicator("Dragon Detector and Forecast - Elliott Wave Zones [v6]",
      max_lines_count=500,
      max_labels_count=500,
      max_boxes_count=200,
+     max_polylines_count=50,
      max_bars_back=5000)
 
 // ============================================================================
@@ -161,6 +162,17 @@ bool   invalidateOn786 = input.bool(true, "Invalidate Fib if breaks 0.786", grou
 string invalidateMode  = input.string("Close", "0.786 Break Uses", options=["Close", "Wick"], group=grpRules, display=INPUT_DISPLAY)
 bool   autoReanchor    = input.bool(true, "Auto Re-anchor After Invalidation", group=grpRules, display=INPUT_DISPLAY)
 
+// --- Projection Paths ---
+string grpProjection       = "=== Projection Paths ==="
+bool   showProjection      = input.bool(true, "Show Projection Paths", group=grpProjection, display=INPUT_DISPLAY, tooltip="Draw curved paths showing potential price targets")
+bool   projectionCurved    = input.bool(true, "Use Curved Paths", group=grpProjection, display=INPUT_DISPLAY)
+color  projectionBullColor = input.color(color.new(color.lime, 50), "Bullish Path Color", group=grpProjection, display=INPUT_DISPLAY)
+color  projectionBearColor = input.color(color.new(color.red, 50), "Bearish Path Color", group=grpProjection, display=INPUT_DISPLAY)
+int    projectionWidth     = input.int(2, "Path Line Width", minval=1, maxval=4, group=grpProjection, display=INPUT_DISPLAY)
+bool   projectionFill      = input.bool(true, "Fill Path Area", group=grpProjection, display=INPUT_DISPLAY)
+int    projectionFillAlpha = input.int(90, "Fill Opacity (0-100)", minval=0, maxval=100, group=grpProjection, display=INPUT_DISPLAY)
+int    projectionBars      = input.int(30, "Projection Length (bars)", minval=5, maxval=100, group=grpProjection, display=INPUT_DISPLAY)
+
 // --- Options Zones ---
 string grpZones        = "=== Options Zones ==="
 bool   showTargetZones = input.bool(true, "Show Target Zones", group=grpZones, display=INPUT_DISPLAY)
@@ -235,6 +247,10 @@ var array<float> recentLows       = array.new<float>()
 var array<int>   recentLowBars    = array.new<int>()
 var bool lastBroadeningState      = false
 var int  lastBroadeningUpdateBar  = -1
+
+// Projection path polylines
+var array<polyline> projectionPaths = array.new<polyline>()
+var array<label>    projectionLabels = array.new<label>()
 
 // Active Fib1 anchors and state
 var float fib1ActiveHigh     = na
@@ -677,6 +693,100 @@ if barstate.islast
         lastDrawnPrevLowBar  := prevPivotLowBar
 
 // ============================================================================
+// PROJECTION PATHS (v6 polylines for price forecasting)
+// ============================================================================
+if barstate.islast and showProjection and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    // Clear previous projections
+    while projectionPaths.size() > 0
+        polyline.delete(projectionPaths.shift())
+    while projectionLabels.size() > 0
+        label.delete(projectionLabels.shift())
+
+    // Calculate key levels
+    float baseLow  = math.min(fib1ActiveHigh, fib1ActiveLow)
+    float baseHigh = math.max(fib1ActiveHigh, fib1ActiveLow)
+    float fibRange = baseHigh - baseLow
+
+    // Determine impulse direction
+    int projDir = 0
+    if not na(lastPivotHighBar) and not na(lastPivotLowBar)
+        projDir := lastPivotLowBar < lastPivotHighBar ? 1 : -1
+
+    // Target levels based on direction
+    float target1618 = projDir >= 0 ? baseLow + fibRange * 1.618 : baseHigh - fibRange * 0.618
+    float target2618 = projDir >= 0 ? baseLow + fibRange * 2.618 : baseHigh - fibRange * 1.618
+    float currentPrice = close
+
+    // Build projection points array
+    array<chart.point> projPoints = array.new<chart.point>()
+
+    // Starting point: current bar and price
+    projPoints.push(chart.point.from_index(bar_index, currentPrice))
+
+    // Intermediate waypoints for curved path
+    int midBar1 = bar_index + math.round(projectionBars * 0.33)
+    int midBar2 = bar_index + math.round(projectionBars * 0.66)
+    int endBar  = bar_index + projectionBars
+
+    if projDir >= 0
+        // Bullish projection path toward 1.618
+        float midPrice1 = currentPrice + (target1618 - currentPrice) * 0.4
+        float midPrice2 = currentPrice + (target1618 - currentPrice) * 0.75
+        projPoints.push(chart.point.from_index(midBar1, midPrice1))
+        projPoints.push(chart.point.from_index(midBar2, midPrice2))
+        projPoints.push(chart.point.from_index(endBar, target1618))
+
+        // Draw bullish projection polyline
+        color projFillColor = projectionFill ? color.new(projectionBullColor, projectionFillAlpha) : na
+        polyline bullPath = polyline.new(
+             projPoints,
+             curved=projectionCurved,
+             line_color=projectionBullColor,
+             line_width=projectionWidth,
+             line_style=line.style_dashed
+        )
+        projectionPaths.push(bullPath)
+
+        // Target label
+        label targetLabel = label.new(
+             endBar, target1618, "1.618 Target\n" + str.tostring(target1618, format.mintick),
+             style=label.style_label_left,
+             color=color.new(projectionBullColor, 70),
+             textcolor=projectionBullColor,
+             size=size.small
+        )
+        projectionLabels.push(targetLabel)
+
+    else
+        // Bearish projection path toward 0.618 retracement
+        float midPrice1 = currentPrice - (currentPrice - target1618) * 0.4
+        float midPrice2 = currentPrice - (currentPrice - target1618) * 0.75
+        projPoints.push(chart.point.from_index(midBar1, midPrice1))
+        projPoints.push(chart.point.from_index(midBar2, midPrice2))
+        projPoints.push(chart.point.from_index(endBar, target1618))
+
+        // Draw bearish projection polyline
+        color projFillColor = projectionFill ? color.new(projectionBearColor, projectionFillAlpha) : na
+        polyline bearPath = polyline.new(
+             projPoints,
+             curved=projectionCurved,
+             line_color=projectionBearColor,
+             line_width=projectionWidth,
+             line_style=line.style_dashed
+        )
+        projectionPaths.push(bearPath)
+
+        // Target label
+        label targetLabel = label.new(
+             endBar, target1618, "0.618 Target\n" + str.tostring(target1618, format.mintick),
+             style=label.style_label_left,
+             color=color.new(projectionBearColor, 70),
+             textcolor=projectionBearColor,
+             size=size.small
+        )
+        projectionLabels.push(targetLabel)
+
+// ============================================================================
 // SIGNAL OUTPUTS (alerts-friendly)
 // ============================================================================
 alertcondition(fib1State == "IN_POCKET", "Fib1 IN_POCKET", "Fib1 state is IN_POCKET")
@@ -692,8 +802,9 @@ string.size bodySize = sizeFromStr(tblBodySize)
 color hdrBg = color.new(#2D2D2D, clampInt(tblHeaderBgOpacity, 0, 100))
 
 if showInfoTable and barstate.islast and not na(infoTable)
-    table.cell(infoTable, 0, 0, "Dragon Detector", text_color=color.yellow, text_size=hdrSize, bgcolor=hdrBg)
-    table.cell(infoTable, 1, 0, fib1State, text_color=color.white, text_size=hdrSize, bgcolor=hdrBg)
+    // v6 text_formatting for bold headers
+    table.cell(infoTable, 0, 0, "Dragon Detector", text_color=color.yellow, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(infoTable, 1, 0, fib1State, text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
 
     if fib1Enabled
         table.cell(infoTable, 0, 1, "Fib 1", text_color=fib1Color, text_size=bodySize, bgcolor=color.new(#2D2D2D, 30))
@@ -719,10 +830,11 @@ if barstate.islast and showRuleTable and not na(ruleTable) and not na(fib1Active
 
     bool inPocketR = close >= math.min(p618R, p650R) and close <= math.max(p618R, p650R)
 
-    table.cell(ruleTable, 0, 0, "Rule", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg)
-    table.cell(ruleTable, 1, 0, "State", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg)
-    table.cell(ruleTable, 2, 0, "Zone", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg)
-    table.cell(ruleTable, 3, 0, "Strikes", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg)
+    // v6 text_formatting for bold headers
+    table.cell(ruleTable, 0, 0, "Rule", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(ruleTable, 1, 0, "State", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(ruleTable, 2, 0, "Zone", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(ruleTable, 3, 0, "Strikes", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
 
     table.cell(ruleTable, 0, 1, "0.618", text_color=color.white, text_size=bodySize)
     table.cell(ruleTable, 1, 1, (fib1State == "CONTINUATION") ? "Holding" : "Not Holding", text_color=color.white, text_size=bodySize)
