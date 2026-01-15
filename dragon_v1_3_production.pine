@@ -74,9 +74,9 @@ vwapCol = input.color(color.rgb(60, 120, 200), "VWAP Color", group=groupCore, di
 
 groupWaves = "Elliott"
 showWaves = input.bool(true, "Show Elliott Wave Scaffold", group=groupWaves, display=display.none)
-waveCol = input.color(color.rgb(170, 120, 210), "Wave Color", group=groupWaves, display=display.none)
+waveCol = input.color(color.rgb(233, 30, 99), "Wave Color", group=groupWaves, display=display.none)
 waveWidth = input.int(1, "Wave Width", minval=1, maxval=5, group=groupWaves, display=display.none)
-waveStyle = input.string("Dotted", "Wave Style", options=["Solid","Dotted","Dashed"], group=groupWaves, display=display.none)
+waveStyle = input.string("Solid", "Wave Style", options=["Solid","Dotted","Dashed"], group=groupWaves, display=display.none)
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -528,14 +528,14 @@ if barstate.islast
             f_hline(scenLines, targetB, clampLeft, rightX, scenBCol, lineStyleScenB, scenBWidth)
 
         if activeScen == 1 and canGreen
-            array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=pathACol))
+            array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=na, border_width=0))
         if activeScen == -1 and canRed
-            array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=pathBCol))
+            array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=na, border_width=0))
         if activeScen == 0
             if canGreen
-                array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=pathACol))
+                array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=na, border_width=0))
             if canRed
-                array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=pathBCol))
+                array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=na, border_width=0))
 
     // Draw predictive paths
     if showPaths
@@ -577,7 +577,10 @@ if barstate.islast
         if waveCount > 0
             for i = 0 to waveCount - 1
                 string wName = "(" + str.tostring(i + 1) + ")"
-                array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wName, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveCol, color=color.new(waveCol, 100), style=label.style_none, size=size.small))
+                int waveDir = array.get(waveDirs, i)
+                // Place label above highs, below lows to avoid overlap with line
+                label.style labelStyle = waveDir == 1 ? label.style_label_down : label.style_label_up
+                array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wName, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveCol, color=color.new(waveCol, 100), style=labelStyle, size=size.small))
 
     // Draw message label
     string msg = "SCAN\n"
