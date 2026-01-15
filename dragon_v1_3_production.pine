@@ -37,6 +37,18 @@ nodeFillCol = input.color(color.new(color.rgb(33, 150, 243), 90), "HVN/LVN Fill 
 nodeWidth = input.int(2, "Node Width", minval=0, maxval=5, group=groupNodes, display=display.none)
 nodeStyle = input.string("Solid", "Node Style", options=["Solid","Dotted","Dashed"], group=groupNodes, display=display.none)
 
+groupVRVP = "Visible Range Volume Profile"
+showVRVP = input.bool(false, "Show VRVP", group=groupVRVP, display=display.none)
+vrvpRowSize = input.int(50, "Row Size", minval=10, maxval=500, group=groupVRVP, display=display.none)
+vrvpWidth = input.int(35, "Profile Width (%)", minval=5, maxval=100, group=groupVRVP, display=display.none)
+vrvpPlacement = input.string("Right", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
+vrvpProfileCol = input.color(color.new(color.rgb(120, 123, 134), 50), "Profile Color", group=groupVRVP, display=display.none)
+vrvpPocCol = input.color(color.rgb(255, 152, 0), "VRVP POC Color", group=groupVRVP, display=display.none)
+vrvpVahCol = input.color(color.rgb(76, 175, 80), "VRVP VAH Color", group=groupVRVP, display=display.none)
+vrvpValCol = input.color(color.rgb(244, 67, 54), "VRVP VAL Color", group=groupVRVP, display=display.none)
+vrvpLineWidth = input.int(2, "Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
+vrvpLineStyle = input.string("Solid", "Line Style", options=["Solid","Dotted","Dashed"], group=groupVRVP, display=display.none)
+
 groupScen = "Scenarios"
 useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, display=display.none)
 showScenarioLines = input.bool(true, "Show Scenario Trigger/Targets", group=groupScen, display=display.none)
@@ -328,34 +340,66 @@ if barstate.islast
         else
             array.set(binVol, found, array.get(binVol, found) + v)
 
+    // Calculate total volume and find POC (highest volume price)
+    float totalVol = 0.0
     float maxVol = na
-    float secondVol = na
-    float minVol = na
     float maxPrice = na
-    float secondPrice = na
-    float minPrice = na
     int sz = array.size(binPrice)
 
     if sz > 0
         for j = 0 to sz - 1
             float pv = array.get(binVol, j)
             float pp = array.get(binPrice, j)
-            if na(minVol) or pv < minVol
-                minVol := pv
-                minPrice := pp
+            totalVol := totalVol + pv
             if na(maxVol) or pv > maxVol
-                secondVol := maxVol
-                secondPrice := maxPrice
                 maxVol := pv
                 maxPrice := pp
-            else
-                if (na(secondVol) or pv > secondVol) and pv < maxVol
-                    secondVol := pv
-                    secondPrice := pp
 
     poc := maxPrice
-    hvn := secondPrice
-    lvn := minPrice
+
+    // Calculate Value Area High (VAH) and Value Area Low (VAL)
+    // Value area = price range containing 70% of total volume
+    float valueAreaPct = 0.70
+    float targetVol = totalVol * valueAreaPct
+
+    // Create array of indices sorted by volume (descending)
+    var int[] sortedIdx = array.new_int()
+    array.clear(sortedIdx)
+
+    if sz > 0
+        for j = 0 to sz - 1
+            array.push(sortedIdx, j)
+
+        // Simple bubble sort by volume descending
+        for i = 0 to sz - 2
+            for j = 0 to sz - 2 - i
+                int idx1 = array.get(sortedIdx, j)
+                int idx2 = array.get(sortedIdx, j + 1)
+                if array.get(binVol, idx1) < array.get(binVol, idx2)
+                    array.set(sortedIdx, j, idx2)
+                    array.set(sortedIdx, j + 1, idx1)
+
+    // Accumulate volume from highest to lowest until we reach 70%
+    float accVol = 0.0
+    float vah = na
+    float val = na
+
+    if sz > 0
+        for j = 0 to sz - 1
+            int idx = array.get(sortedIdx, j)
+            float pv = array.get(binVol, idx)
+            float pp = array.get(binPrice, idx)
+
+            if accVol < targetVol
+                accVol := accVol + pv
+                // Update VAH (highest price in value area) and VAL (lowest price in value area)
+                if na(vah) or pp > vah
+                    vah := pp
+                if na(val) or pp < val
+                    val := pp
+
+    hvn := vah
+    lvn := val
 
 // ============================================================================
 // SCENARIO LOGIC (A = bullish, B = bearish)
@@ -581,6 +625,130 @@ if barstate.islast
                 // Place label above highs, below lows to avoid overlap with line
                 labelStyle = waveDir == 1 ? label.style_label_down : label.style_label_up
                 array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wName, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveCol, color=color.new(waveCol, 100), style=labelStyle, size=size.small))
+
+    // Draw Visible Range Volume Profile (VRVP)
+    if showVRVP
+        // Calculate visible bar range
+        int visibleBars = last_bar_index - chart.left_visible_bar_index + 1
+        int vrvpStart = math.max(0, last_bar_index - visibleBars + 1)
+        int vrvpBars = last_bar_index - vrvpStart + 1
+
+        // Build VRVP bins
+        var float[] vrvpBinPrice = array.new_float()
+        var float[] vrvpBinVol = array.new_float()
+        array.clear(vrvpBinPrice)
+        array.clear(vrvpBinVol)
+
+        float vrvpTick = syminfo.mintick * vrvpRowSize
+
+        // Collect volume data for visible range
+        for i = 0 to math.min(vrvpBars - 1, 4999)
+            int barIdx = last_bar_index - i
+            if barIdx >= 0
+                float pRaw = close[i]
+                float pBin = math.round(pRaw / vrvpTick) * vrvpTick
+                float v = volume[i]
+
+                int foundIdx = -1
+                int nBins = array.size(vrvpBinPrice)
+                for j = 0 to nBins - 1
+                    if array.get(vrvpBinPrice, j) == pBin
+                        foundIdx := j
+                        break
+
+                if foundIdx == -1
+                    array.push(vrvpBinPrice, pBin)
+                    array.push(vrvpBinVol, v)
+                else
+                    array.set(vrvpBinVol, foundIdx, array.get(vrvpBinVol, foundIdx) + v)
+
+        // Find max volume for scaling
+        float vrvpMaxVol = 0.0
+        float vrvpTotalVol = 0.0
+        float vrvpPocPrice = na
+        int vrvpSize = array.size(vrvpBinPrice)
+
+        if vrvpSize > 0
+            for j = 0 to vrvpSize - 1
+                float v = array.get(vrvpBinVol, j)
+                vrvpTotalVol := vrvpTotalVol + v
+                if v > vrvpMaxVol
+                    vrvpMaxVol := v
+                    vrvpPocPrice := array.get(vrvpBinPrice, j)
+
+        // Calculate VRVP VAH and VAL (70% value area)
+        float vrvpVahPrice = na
+        float vrvpValPrice = na
+
+        if vrvpSize > 0
+            var int[] vrvpSortedIdx = array.new_int()
+            array.clear(vrvpSortedIdx)
+
+            for j = 0 to vrvpSize - 1
+                array.push(vrvpSortedIdx, j)
+
+            // Sort by volume descending
+            for i = 0 to vrvpSize - 2
+                for j = 0 to vrvpSize - 2 - i
+                    int idx1 = array.get(vrvpSortedIdx, j)
+                    int idx2 = array.get(vrvpSortedIdx, j + 1)
+                    if array.get(vrvpBinVol, idx1) < array.get(vrvpBinVol, idx2)
+                        array.set(vrvpSortedIdx, j, idx2)
+                        array.set(vrvpSortedIdx, j + 1, idx1)
+
+            // Calculate value area
+            float vrvpTargetVol = vrvpTotalVol * 0.70
+            float vrvpAccVol = 0.0
+
+            for j = 0 to vrvpSize - 1
+                int idx = array.get(vrvpSortedIdx, j)
+                float v = array.get(vrvpBinVol, idx)
+                float p = array.get(vrvpBinPrice, idx)
+
+                if vrvpAccVol < vrvpTargetVol
+                    vrvpAccVol := vrvpAccVol + v
+                    if na(vrvpVahPrice) or p > vrvpVahPrice
+                        vrvpVahPrice := p
+                    if na(vrvpValPrice) or p < vrvpValPrice
+                        vrvpValPrice := p
+
+        // Convert line style
+        string vrvpStyleConvert = vrvpLineStyle == "Solid" ? line.style_solid : vrvpLineStyle == "Dotted" ? line.style_dotted : line.style_dashed
+
+        // Draw VRVP histogram bars
+        int vrvpBaseX = vrvpPlacement == "Right" ? last_bar_index : chart.left_visible_bar_index
+        int vrvpBarsRange = last_bar_index - chart.left_visible_bar_index
+        int vrvpMaxWidth = math.round(vrvpBarsRange * vrvpWidth / 100.0)
+
+        if vrvpSize > 0 and vrvpMaxVol > 0
+            for j = 0 to vrvpSize - 1
+                float p = array.get(vrvpBinPrice, j)
+                float v = array.get(vrvpBinVol, j)
+                float volPct = v / vrvpMaxVol
+                int barLength = math.round(volPct * vrvpMaxWidth)
+
+                // Determine color based on POC/VAH/VAL
+                color barColor = vrvpProfileCol
+                int barWidth = 1
+                string barStyle = line.style_solid
+
+                if p == vrvpPocPrice
+                    barColor := vrvpPocCol
+                    barWidth := vrvpLineWidth
+                    barStyle := vrvpStyleConvert
+                else if p == vrvpVahPrice
+                    barColor := vrvpVahCol
+                    barWidth := vrvpLineWidth
+                    barStyle := vrvpStyleConvert
+                else if p == vrvpValPrice
+                    barColor := vrvpValCol
+                    barWidth := vrvpLineWidth
+                    barStyle := vrvpStyleConvert
+
+                int x1 = vrvpBaseX
+                int x2 = vrvpPlacement == "Right" ? vrvpBaseX + barLength : vrvpBaseX - barLength
+
+                line.new(x1, p, x2, p, xloc=xloc.bar_index, color=barColor, style=barStyle, width=barWidth)
 
     // Draw message label
     string msg = "SCAN\n"
