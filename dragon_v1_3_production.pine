@@ -30,20 +30,25 @@ fibMicroStyle = input.string("Dashed", "Micro Fib Style", options=["Solid","Dott
 
 groupNodes = "Nodes"
 showNodes = input.bool(true, "Show POC/HVN/LVN", group=groupNodes, display=display.none)
-nodePocCol = input.color(color.rgb(126, 134, 143), "POC Color", group=groupNodes, display=display.none)
-nodeHvnCol = input.color(color.new(color.rgb(126, 134, 143), 35), "HVN Color", group=groupNodes, display=display.none)
-nodeLvnCol = input.color(color.new(color.rgb(126, 134, 143), 60), "LVN Color", group=groupNodes, display=display.none)
-nodeWidth = input.int(1, "Node Width", minval=1, maxval=5, group=groupNodes, display=display.none)
+nodePocCol = input.color(color.rgb(33, 150, 243), "POC Color", group=groupNodes, display=display.none)
+nodeHvnCol = input.color(color.rgb(100, 181, 246), "HVN (VAH) Color", group=groupNodes, display=display.none)
+nodeLvnCol = input.color(color.rgb(66, 165, 245), "LVN (VAL) Color", group=groupNodes, display=display.none)
+nodeFillCol = input.color(color.new(color.rgb(33, 150, 243), 90), "HVN/LVN Fill Color", group=groupNodes, display=display.none)
+nodeWidth = input.int(2, "Node Width", minval=0, maxval=5, group=groupNodes, display=display.none)
 nodeStyle = input.string("Solid", "Node Style", options=["Solid","Dotted","Dashed"], group=groupNodes, display=display.none)
 
 groupScen = "Scenarios"
 useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, display=display.none)
 showScenarioLines = input.bool(true, "Show Scenario Trigger/Targets", group=groupScen, display=display.none)
 scenTrigCol = input.color(color.rgb(212, 175, 55), "Trigger Color", group=groupScen, display=display.none)
+scenTrigWidth = input.int(2, "Trigger Line Width", minval=0, maxval=5, group=groupScen, display=display.none)
+scenTrigStyle = input.string("Solid", "Trigger Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
 scenACol = input.color(color.rgb(61, 170, 106), "Scenario A Target Color", group=groupScen, display=display.none)
+scenAWidth = input.int(2, "Scenario A Line Width", minval=0, maxval=5, group=groupScen, display=display.none)
+scenAStyle = input.string("Solid", "Scenario A Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
 scenBCol = input.color(color.rgb(205, 78, 76), "Scenario B Target Color", group=groupScen, display=display.none)
-scenWidth = input.int(2, "Scenario Line Width", minval=1, maxval=5, group=groupScen, display=display.none)
-scenStyle = input.string("Solid", "Scenario Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
+scenBWidth = input.int(2, "Scenario B Line Width", minval=0, maxval=5, group=groupScen, display=display.none)
+scenBStyle = input.string("Solid", "Scenario B Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
 
 groupPath = "Paths"
 showPaths = input.bool(true, "Show Predictive Paths", group=groupPath, display=display.none)
@@ -112,9 +117,16 @@ f_clearBoxes(_arr) =>
             box.delete(array.get(_arr, k))
         array.clear(_arr)
 
-f_hline(_arr, _y, _x1, _x2, _col, _style, _w) =>
+f_clearLinefills(_arr) =>
+    int n = array.size(_arr)
+    if n > 0
+        for k = n - 1 to 0
+            linefill.delete(array.get(_arr, k))
+        array.clear(_arr)
+
+f_hline(_arr, _y, _x1, _x2, _col, _style, _w, _extend = extend.none) =>
     if not na(_y)
-        line ln = line.new(_x1, _y, _x2, _y, xloc=xloc.bar_index, extend=extend.none, color=_col, style=_style, width=_w)
+        line ln = line.new(_x1, _y, _x2, _y, xloc=xloc.bar_index, extend=_extend, color=_col, style=_style, width=_w)
         array.push(_arr, ln)
 
 f_seg(_arr, _x1, _y1, _x2, _y2, _col, _style, _w) =>
@@ -125,6 +137,22 @@ f_seg(_arr, _x1, _y1, _x2, _y2, _col, _style, _w) =>
 f_pushLevel(_arr, _val) =>
     if not na(_val)
         array.push(_arr, _val)
+
+// Draw fibonacci line with label - line starts after label text
+f_fibLineWithLabel(_lines, _labels, _y, _leftX, _rightX, _col, _style, _w, _labelText, _labelSize) =>
+    if not na(_y)
+        // Label positioned to the left, no background
+        label lbl = label.new(_leftX, _y, _labelText,
+             xloc=xloc.bar_index, yloc=yloc.price,
+             textcolor=_col, color=color.new(color.black, 100),
+             style=label.style_none, size=_labelSize, textalign=text.align_right)
+        array.push(_labels, lbl)
+        // Line starts slightly after the label position and extends right
+        int lineStartX = _leftX + 1
+        line ln = line.new(lineStartX, _y, _rightX, _y,
+             xloc=xloc.bar_index, extend=extend.right,
+             color=_col, style=_style, width=_w)
+        array.push(_lines, ln)
 
 // ============================================================================
 // WAVE TRACKING STATE
@@ -381,6 +409,7 @@ if barstate.isconfirmed or barstate.isrealtime
 var line[] fibLines = array.new_line()
 var label[] fibLabels = array.new_label()
 var line[] nodeLines = array.new_line()
+var linefill[] nodeFills = array.new_linefill()
 var line[] scenLines = array.new_line()
 var box[] scenBoxes = array.new_box()
 var line[] pathLinesA = array.new_line()
@@ -394,7 +423,9 @@ var float[] levelsB = array.new_float()
 lineStyleMacro = f_lineStyle(fibMacroStyle)
 lineStyleMicro = f_lineStyle(fibMicroStyle)
 lineStyleNodes = f_lineStyle(nodeStyle)
-lineStyleScen = f_lineStyle(scenStyle)
+lineStyleScenTrig = f_lineStyle(scenTrigStyle)
+lineStyleScenA = f_lineStyle(scenAStyle)
+lineStyleScenB = f_lineStyle(scenBStyle)
 lineStylePath = f_lineStyle(pathStyle)
 lineStyleWave = f_lineStyle(waveStyle)
 lblStyle = f_labelStyle(labelStyleOpt)
@@ -413,6 +444,7 @@ if barstate.islast
     // Clear all previous drawings
     f_clearLines(fibLines)
     f_clearLines(nodeLines)
+    f_clearLinefills(nodeFills)
     f_clearLines(scenLines)
     f_clearLines(pathLinesA)
     f_clearLines(pathLinesB)
@@ -437,53 +469,51 @@ if barstate.islast
     int macroLeftX = na(sessStartBar) ? clampLeft : math.max(sessStartBar, clampLeft)
     int microLeftX = na(microStartBar) ? clampLeft : math.max(microStartBar, clampLeft)
 
-    // Draw Fibonacci levels
+    // Draw Fibonacci levels with labels
     if showFibs
-        int macroLabelX = macroLeftX - 3
-        int microLabelX = microLeftX - 3
+        int macroLabelX = macroLeftX - 8
+        int microLabelX = microLeftX - 8
 
         if showMacroRetrace
-            f_hline(fibLines, macroFib50, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
-            f_hline(fibLines, macroFib618, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
-            if not na(macroFib50)
-                array.push(fibLabels, label.new(macroLabelX, macroFib50, "(0.5, " + str.tostring(macroFib50, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
-            if not na(macroFib618)
-                array.push(fibLabels, label.new(macroLabelX, macroFib618, "(0.618, " + str.tostring(macroFib618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
+            f_fibLineWithLabel(fibLines, fibLabels, macroFib50, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "0.5 | " + str.tostring(macroFib50, format.mintick), size.small)
+            f_fibLineWithLabel(fibLines, fibLabels, macroFib618, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "0.618 | " + str.tostring(macroFib618, format.mintick), size.small)
 
         if showMacroExt
-            f_hline(fibLines, macroExt1272, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
-            f_hline(fibLines, macroExt1618, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
-            if not na(macroExt1272)
-                array.push(fibLabels, label.new(macroLabelX, macroExt1272, "(1.272, " + str.tostring(macroExt1272, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
-            if not na(macroExt1618)
-                array.push(fibLabels, label.new(macroLabelX, macroExt1618, "(1.618, " + str.tostring(macroExt1618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
+            f_fibLineWithLabel(fibLines, fibLabels, macroExt1272, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "1.272 | " + str.tostring(macroExt1272, format.mintick), size.small)
+            f_fibLineWithLabel(fibLines, fibLabels, macroExt1618, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "1.618 | " + str.tostring(macroExt1618, format.mintick), size.small)
 
         if showMicroRetrace
-            f_hline(fibLines, microFib50, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
-            f_hline(fibLines, microFib618, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
-            if not na(microFib50)
-                array.push(fibLabels, label.new(microLabelX, microFib50, "(0.5, " + str.tostring(microFib50, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
-            if not na(microFib618)
-                array.push(fibLabels, label.new(microLabelX, microFib618, "(0.618, " + str.tostring(microFib618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
+            f_fibLineWithLabel(fibLines, fibLabels, microFib50, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "0.5 | " + str.tostring(microFib50, format.mintick), size.small)
+            f_fibLineWithLabel(fibLines, fibLabels, microFib618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "0.618 | " + str.tostring(microFib618, format.mintick), size.small)
 
         if showMicroExt
-            f_hline(fibLines, microExt1272, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
-            f_hline(fibLines, microExt1618, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
-            if not na(microExt1272)
-                array.push(fibLabels, label.new(microLabelX, microExt1272, "(1.272, " + str.tostring(microExt1272, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
-            if not na(microExt1618)
-                array.push(fibLabels, label.new(microLabelX, microExt1618, "(1.618, " + str.tostring(microExt1618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
+            f_fibLineWithLabel(fibLines, fibLabels, microExt1272, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "1.272 | " + str.tostring(microExt1272, format.mintick), size.small)
+            f_fibLineWithLabel(fibLines, fibLabels, microExt1618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "1.618 | " + str.tostring(microExt1618, format.mintick), size.small)
 
-    // Draw volume nodes
+    // Draw volume nodes with fill between HVN and LVN
     if showNodes
-        f_hline(nodeLines, poc, clampLeft, rightX, nodePocCol, lineStyleNodes, nodeWidth)
-        f_hline(nodeLines, hvn, clampLeft, rightX, nodeHvnCol, lineStyleNodes, nodeWidth)
-        f_hline(nodeLines, lvn, clampLeft, rightX, nodeLvnCol, lineStyleNodes, nodeWidth)
+        // Draw POC line
+        f_hline(nodeLines, poc, clampLeft, rightX, nodePocCol, lineStyleNodes, nodeWidth, extend.right)
+
+        // Draw HVN and LVN lines and create fill between them
+        if not na(hvn) and not na(lvn)
+            line hvnLine = line.new(clampLeft, hvn, rightX, hvn, xloc=xloc.bar_index, extend=extend.right, color=nodeHvnCol, style=lineStyleNodes, width=nodeWidth)
+            array.push(nodeLines, hvnLine)
+
+            line lvnLine = line.new(clampLeft, lvn, rightX, lvn, xloc=xloc.bar_index, extend=extend.right, color=nodeLvnCol, style=lineStyleNodes, width=nodeWidth)
+            array.push(nodeLines, lvnLine)
+
+            // Create fill between HVN (VAH) and LVN (VAL)
+            linefill nodeFill = linefill.new(hvnLine, lvnLine, nodeFillCol)
+            array.push(nodeFills, nodeFill)
+        else
+            f_hline(nodeLines, hvn, clampLeft, rightX, nodeHvnCol, lineStyleNodes, nodeWidth, extend.right)
+            f_hline(nodeLines, lvn, clampLeft, rightX, nodeLvnCol, lineStyleNodes, nodeWidth, extend.right)
 
     // Draw scenario lines and boxes
     if showScenarioLines
-        if not na(trig)
-            f_hline(scenLines, trig, clampLeft, rightX, scenTrigCol, lineStyleScen, scenWidth)
+        if not na(trig) and scenTrigWidth > 0
+            f_hline(scenLines, trig, clampLeft, rightX, scenTrigCol, lineStyleScenTrig, scenTrigWidth)
 
         bool canGreen = not na(trig) and not na(targetA)
         bool canRed = not na(trig) and not na(targetB)
@@ -492,10 +522,10 @@ if barstate.islast
         float redTop = canRed ? math.max(trig, targetB) : na
         float redBot = canRed ? math.min(trig, targetB) : na
 
-        if not na(targetA)
-            f_hline(scenLines, targetA, clampLeft, rightX, scenACol, lineStyleScen, scenWidth)
-        if not na(targetB)
-            f_hline(scenLines, targetB, clampLeft, rightX, scenBCol, lineStyleScen, scenWidth)
+        if not na(targetA) and scenAWidth > 0
+            f_hline(scenLines, targetA, clampLeft, rightX, scenACol, lineStyleScenA, scenAWidth)
+        if not na(targetB) and scenBWidth > 0
+            f_hline(scenLines, targetB, clampLeft, rightX, scenBCol, lineStyleScenB, scenBWidth)
 
         if activeScen == 1 and canGreen
             array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=pathACol))
