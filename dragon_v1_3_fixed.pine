@@ -121,11 +121,13 @@ var int[] waveDirs = array.new_int()
 
 f_updateWave(_bars, _prices, _dirs, _bar, _price, _dir, _max) =>
     int n = array.size(_bars)
+    int result = 0
     if n == 0
         // First wave point
         array.push(_bars, _bar)
         array.push(_prices, _price)
         array.push(_dirs, _dir)
+        result := 0
     else
         int lastIdx = n - 1
         int lastDir = array.get(_dirs, lastIdx)
@@ -136,6 +138,7 @@ f_updateWave(_bars, _prices, _dirs, _bar, _price, _dir, _max) =>
             if moreExtreme
                 array.set(_bars, lastIdx, _bar)
                 array.set(_prices, lastIdx, _price)
+            result := 0
         else
             // Direction change - add new point
             array.push(_bars, _bar)
@@ -146,6 +149,8 @@ f_updateWave(_bars, _prices, _dirs, _bar, _price, _dir, _max) =>
                 array.shift(_bars)
                 array.shift(_prices)
                 array.shift(_dirs)
+            result := 0
+    result
 
 // Zigzag path builder that honors pathBars/pathStep.
 // _dirBias: +1 for A, -1 for B. It flips the zigzag bias.
