@@ -579,7 +579,7 @@ if barstate.islast
                 string wName = "(" + str.tostring(i + 1) + ")"
                 int waveDir = array.get(waveDirs, i)
                 // Place label above highs, below lows to avoid overlap with line
-                label.style labelStyle = waveDir == 1 ? label.style_label_down : label.style_label_up
+                labelStyle = waveDir == 1 ? label.style_label_down : label.style_label_up
                 array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wName, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveCol, color=color.new(waveCol, 100), style=labelStyle, size=size.small))
 
     // Draw message label
