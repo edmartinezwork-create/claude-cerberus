@@ -1,6 +1,6 @@
 // This Pine Script code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // Dragon Detector and Forecast - Elliott Wave Enhanced
-// Version 11 | Pine Script v6 Compliant with Projection Paths
+// Version 12 | Pine Script v6 Compliant with Full Visual Suite
 //
 // NOTE: Elliott Wave labeling is simplified and does not implement full EW validation rules.
 // For proper Elliott Wave analysis, additional validation would be needed:
@@ -166,12 +166,44 @@ bool   autoReanchor    = input.bool(true, "Auto Re-anchor After Invalidation", g
 string grpProjection       = "=== Projection Paths ==="
 bool   showProjection      = input.bool(true, "Show Projection Paths", group=grpProjection, display=INPUT_DISPLAY, tooltip="Draw curved paths showing potential price targets")
 bool   projectionCurved    = input.bool(true, "Use Curved Paths", group=grpProjection, display=INPUT_DISPLAY)
+bool   showDualPaths       = input.bool(true, "Show Both Bull & Bear Paths", group=grpProjection, display=INPUT_DISPLAY, tooltip="Display both bullish and bearish scenarios simultaneously")
 color  projectionBullColor = input.color(color.new(color.lime, 50), "Bullish Path Color", group=grpProjection, display=INPUT_DISPLAY)
 color  projectionBearColor = input.color(color.new(color.red, 50), "Bearish Path Color", group=grpProjection, display=INPUT_DISPLAY)
 int    projectionWidth     = input.int(2, "Path Line Width", minval=1, maxval=4, group=grpProjection, display=INPUT_DISPLAY)
 bool   projectionFill      = input.bool(true, "Fill Path Area", group=grpProjection, display=INPUT_DISPLAY)
 int    projectionFillAlpha = input.int(90, "Fill Opacity (0-100)", minval=0, maxval=100, group=grpProjection, display=INPUT_DISPLAY)
 int    projectionBars      = input.int(30, "Projection Length (bars)", minval=5, maxval=100, group=grpProjection, display=INPUT_DISPLAY)
+bool   showCountdown       = input.bool(true, "Show Countdown to Target", group=grpProjection, display=INPUT_DISPLAY)
+
+// --- Bar Coloring ---
+string grpBarColor       = "=== Bar Coloring ==="
+bool   enableBarColor    = input.bool(true, "Enable State-Based Bar Coloring", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorPocket    = input.color(color.new(color.green, 30), "In Pocket Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorContinue  = input.color(color.new(color.lime, 40), "Continuation Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorPullback  = input.color(color.new(color.yellow, 40), "Pullback Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorFailed    = input.color(color.new(color.red, 30), "Failed Pocket Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorReset     = input.color(color.new(color.gray, 50), "Reset/Invalidated Color", group=grpBarColor, display=INPUT_DISPLAY)
+
+// --- Risk/Reward Visualization ---
+string grpRiskReward     = "=== Risk/Reward Visualization ==="
+bool   showRiskReward    = input.bool(true, "Show Risk/Reward Box", group=grpRiskReward, display=INPUT_DISPLAY)
+color  rrEntryColor      = input.color(color.new(color.blue, 70), "Entry Zone Color", group=grpRiskReward, display=INPUT_DISPLAY)
+color  rrTargetColor     = input.color(color.new(color.green, 70), "Target Zone Color", group=grpRiskReward, display=INPUT_DISPLAY)
+color  rrStopColor       = input.color(color.new(color.red, 70), "Stop Zone Color", group=grpRiskReward, display=INPUT_DISPLAY)
+int    rrBorderWidth     = input.int(1, "Box Border Width", minval=0, maxval=3, group=grpRiskReward, display=INPUT_DISPLAY)
+
+// --- Trend Arrows ---
+string grpArrows         = "=== Trend Arrows ==="
+bool   showTrendArrows   = input.bool(true, "Show Trend Arrows at Pivots", group=grpArrows, display=INPUT_DISPLAY)
+color  arrowBullColor    = input.color(color.lime, "Bullish Arrow Color", group=grpArrows, display=INPUT_DISPLAY)
+color  arrowBearColor    = input.color(color.red, "Bearish Arrow Color", group=grpArrows, display=INPUT_DISPLAY)
+
+// --- Historical Markers ---
+string grpHistorical     = "=== Historical Markers ==="
+bool   showHistMarkers   = input.bool(true, "Show Historical Pivot Markers", group=grpHistorical, display=INPUT_DISPLAY)
+color  histHighColor     = input.color(color.new(color.aqua, 50), "Pivot High Marker Color", group=grpHistorical, display=INPUT_DISPLAY)
+color  histLowColor      = input.color(color.new(color.orange, 50), "Pivot Low Marker Color", group=grpHistorical, display=INPUT_DISPLAY)
+string histMarkerSize    = input.string("Tiny", "Marker Size", options=["Tiny", "Small", "Normal"], group=grpHistorical, display=INPUT_DISPLAY)
 
 // --- Options Zones ---
 string grpZones        = "=== Options Zones ==="
@@ -251,6 +283,18 @@ var int  lastBroadeningUpdateBar  = -1
 // Projection path polylines
 var array<polyline> projectionPaths = array.new<polyline>()
 var array<label>    projectionLabels = array.new<label>()
+
+// Risk/Reward boxes
+var array<box>   rrBoxes  = array.new<box>()
+var array<label> rrLabels = array.new<label>()
+
+// Linefill for golden zone
+var array<linefill> goldenLinefills = array.new<linefill>()
+var line goldenLine618 = na
+var line goldenLine786 = na
+
+// Trend arrow tracking
+var int lastArrowBar = -1
 
 // Active Fib1 anchors and state
 var float fib1ActiveHigh     = na
@@ -419,7 +463,8 @@ drawFibSet(float fibHigh, float fibLow, int lineWidth, bool showLabels,
 
                 if showLabels
                     string.size labelSizeValue = sizeFromStr(labelSizeStr)
-                    string labelText = "(" + str.tostring(lvl.ratio, "#.###") + ")"
+                    // Include actual price in label for key decision levels
+                    string labelText = str.tostring(lvl.ratio, "#.###") + " │ " + str.tostring(price, format.mintick)
                     label fibLabel = label.new(
                          startBar - 2, price, labelText,
                          style=label.style_none,
@@ -712,34 +757,30 @@ if barstate.islast and showProjection and not na(fib1ActiveHigh) and not na(fib1
     if not na(lastPivotHighBar) and not na(lastPivotLowBar)
         projDir := lastPivotLowBar < lastPivotHighBar ? 1 : -1
 
-    // Target levels based on direction
-    float target1618 = projDir >= 0 ? baseLow + fibRange * 1.618 : baseHigh - fibRange * 0.618
-    float target2618 = projDir >= 0 ? baseLow + fibRange * 2.618 : baseHigh - fibRange * 1.618
+    // Target levels for both directions
+    float bullTarget = baseLow + fibRange * 1.618
+    float bearTarget = baseHigh - fibRange * 0.618
     float currentPrice = close
 
-    // Build projection points array
-    array<chart.point> projPoints = array.new<chart.point>()
-
-    // Starting point: current bar and price
-    projPoints.push(chart.point.from_index(bar_index, currentPrice))
-
-    // Intermediate waypoints for curved path
+    // Intermediate waypoints for curved paths
     int midBar1 = bar_index + math.round(projectionBars * 0.33)
     int midBar2 = bar_index + math.round(projectionBars * 0.66)
     int endBar  = bar_index + projectionBars
 
-    if projDir >= 0
-        // Bullish projection path toward 1.618
-        float midPrice1 = currentPrice + (target1618 - currentPrice) * 0.4
-        float midPrice2 = currentPrice + (target1618 - currentPrice) * 0.75
-        projPoints.push(chart.point.from_index(midBar1, midPrice1))
-        projPoints.push(chart.point.from_index(midBar2, midPrice2))
-        projPoints.push(chart.point.from_index(endBar, target1618))
+    // === BULLISH PROJECTION PATH ===
+    bool drawBullPath = showDualPaths or projDir >= 0
+    if drawBullPath
+        array<chart.point> bullPoints = array.new<chart.point>()
+        bullPoints.push(chart.point.from_index(bar_index, currentPrice))
 
-        // Draw bullish projection polyline
-        color projFillColor = projectionFill ? color.new(projectionBullColor, projectionFillAlpha) : na
+        float bullMid1 = currentPrice + (bullTarget - currentPrice) * 0.4
+        float bullMid2 = currentPrice + (bullTarget - currentPrice) * 0.75
+        bullPoints.push(chart.point.from_index(midBar1, bullMid1))
+        bullPoints.push(chart.point.from_index(midBar2, bullMid2))
+        bullPoints.push(chart.point.from_index(endBar, bullTarget))
+
         polyline bullPath = polyline.new(
-             projPoints,
+             bullPoints,
              curved=projectionCurved,
              line_color=projectionBullColor,
              line_width=projectionWidth,
@@ -747,28 +788,34 @@ if barstate.islast and showProjection and not na(fib1ActiveHigh) and not na(fib1
         )
         projectionPaths.push(bullPath)
 
-        // Target label
-        label targetLabel = label.new(
-             endBar, target1618, "1.618 Target\n" + str.tostring(target1618, format.mintick),
+        // Bullish target label with countdown
+        string bullLabelText = "▲ 1.618 Target\n" + str.tostring(bullTarget, format.mintick)
+        if showCountdown
+            bullLabelText := bullLabelText + "\n(" + str.tostring(projectionBars) + " bars)"
+
+        label bullLabel = label.new(
+             endBar, bullTarget, bullLabelText,
              style=label.style_label_left,
              color=color.new(projectionBullColor, 70),
              textcolor=projectionBullColor,
              size=size.small
         )
-        projectionLabels.push(targetLabel)
+        projectionLabels.push(bullLabel)
 
-    else
-        // Bearish projection path toward 0.618 retracement
-        float midPrice1 = currentPrice - (currentPrice - target1618) * 0.4
-        float midPrice2 = currentPrice - (currentPrice - target1618) * 0.75
-        projPoints.push(chart.point.from_index(midBar1, midPrice1))
-        projPoints.push(chart.point.from_index(midBar2, midPrice2))
-        projPoints.push(chart.point.from_index(endBar, target1618))
+    // === BEARISH PROJECTION PATH ===
+    bool drawBearPath = showDualPaths or projDir < 0
+    if drawBearPath
+        array<chart.point> bearPoints = array.new<chart.point>()
+        bearPoints.push(chart.point.from_index(bar_index, currentPrice))
 
-        // Draw bearish projection polyline
-        color projFillColor = projectionFill ? color.new(projectionBearColor, projectionFillAlpha) : na
+        float bearMid1 = currentPrice - (currentPrice - bearTarget) * 0.4
+        float bearMid2 = currentPrice - (currentPrice - bearTarget) * 0.75
+        bearPoints.push(chart.point.from_index(midBar1, bearMid1))
+        bearPoints.push(chart.point.from_index(midBar2, bearMid2))
+        bearPoints.push(chart.point.from_index(endBar, bearTarget))
+
         polyline bearPath = polyline.new(
-             projPoints,
+             bearPoints,
              curved=projectionCurved,
              line_color=projectionBearColor,
              line_width=projectionWidth,
@@ -776,15 +823,112 @@ if barstate.islast and showProjection and not na(fib1ActiveHigh) and not na(fib1
         )
         projectionPaths.push(bearPath)
 
-        // Target label
-        label targetLabel = label.new(
-             endBar, target1618, "0.618 Target\n" + str.tostring(target1618, format.mintick),
+        // Bearish target label with countdown
+        string bearLabelText = "▼ 0.618 Target\n" + str.tostring(bearTarget, format.mintick)
+        if showCountdown
+            bearLabelText := bearLabelText + "\n(" + str.tostring(projectionBars) + " bars)"
+
+        label bearLabel = label.new(
+             endBar, bearTarget, bearLabelText,
              style=label.style_label_left,
              color=color.new(projectionBearColor, 70),
              textcolor=projectionBearColor,
              size=size.small
         )
-        projectionLabels.push(targetLabel)
+        projectionLabels.push(bearLabel)
+
+// ============================================================================
+// RISK/REWARD VISUALIZATION
+// ============================================================================
+if barstate.islast and showRiskReward and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    // Clear previous R/R boxes
+    while rrBoxes.size() > 0
+        box.delete(rrBoxes.shift())
+    while rrLabels.size() > 0
+        label.delete(rrLabels.shift())
+
+    float rrBaseLow  = math.min(fib1ActiveHigh, fib1ActiveLow)
+    float rrBaseHigh = math.max(fib1ActiveHigh, fib1ActiveLow)
+    float rrFibRange = rrBaseHigh - rrBaseLow
+
+    // Entry zone: Golden Pocket (0.618 to 0.65)
+    float entryTop = rrBaseLow + rrFibRange * clampFloat(pocketUpperRatio, 0.0, 1.0)
+    float entryBot = rrBaseLow + rrFibRange * 0.618
+
+    // Stop zone: Below 0.786
+    float stopLevel = rrBaseLow + rrFibRange * 0.786
+
+    // Target: 1.618 extension
+    float targetLevel = rrBaseLow + rrFibRange * 1.618
+
+    // Calculate risk/reward ratio
+    float entryMid = (entryTop + entryBot) / 2.0
+    float risk     = math.abs(entryMid - stopLevel)
+    float reward   = math.abs(targetLevel - entryMid)
+    float rrRatio  = risk > 0 ? reward / risk : 0
+
+    int rrStartBar = bar_index
+    int rrEndBar   = bar_index + math.round(projectionBars * 0.5)
+
+    // Entry zone box
+    box entryBox = box.new(
+         rrStartBar, math.max(entryTop, entryBot), rrEndBar, math.min(entryTop, entryBot),
+         border_color=color.blue, border_width=rrBorderWidth, bgcolor=rrEntryColor
+    )
+    rrBoxes.push(entryBox)
+
+    // Stop zone line indicator
+    line stopLine = line.new(
+         rrStartBar, stopLevel, rrEndBar, stopLevel,
+         color=color.red, width=2, style=line.style_dotted
+    )
+
+    // Target zone line indicator
+    line targetLine = line.new(
+         rrStartBar, targetLevel, rrEndBar, targetLevel,
+         color=color.green, width=2, style=line.style_dotted
+    )
+
+    // R:R ratio label
+    string rrText = "R:R = 1:" + str.tostring(rrRatio, "#.##")
+    label rrLabel = label.new(
+         rrEndBar, entryMid, rrText,
+         style=label.style_label_left,
+         color=color.new(color.blue, 80),
+         textcolor=color.white,
+         size=size.small
+    )
+    rrLabels.push(rrLabel)
+
+// ============================================================================
+// LINEFILL FOR GOLDEN ZONE (gradient effect between 0.618-0.786)
+// ============================================================================
+if barstate.islast and showGoldenZone and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    // Clear previous linefills
+    while goldenLinefills.size() > 0
+        linefill.delete(goldenLinefills.shift())
+    if not na(goldenLine618)
+        line.delete(goldenLine618)
+    if not na(goldenLine786)
+        line.delete(goldenLine786)
+
+    float lfBaseLow  = math.min(fib1ActiveHigh, fib1ActiveLow)
+    float lfBaseHigh = math.max(fib1ActiveHigh, fib1ActiveLow)
+    float lfFibRange = lfBaseHigh - lfBaseLow
+
+    float lf618 = lfBaseLow + lfFibRange * 0.618
+    float lf786 = lfBaseLow + lfFibRange * 0.786
+
+    int lfStartBar = not na(fib1ActiveStartBar) ? fib1ActiveStartBar : bar_index - DEFAULT_LOOKBACK
+    int lfEndBar   = bar_index + zoneExtendBars
+
+    // Create invisible lines for linefill anchors
+    goldenLine618 := line.new(lfStartBar, lf618, lfEndBar, lf618, color=color.new(color.orange, 100))
+    goldenLine786 := line.new(lfStartBar, lf786, lfEndBar, lf786, color=color.new(color.orange, 100))
+
+    // Create gradient linefill between the two lines
+    linefill goldenFill = linefill.new(goldenLine618, goldenLine786, color.new(goldenZoneColor, goldenZoneOpacity))
+    goldenLinefills.push(goldenFill)
 
 // ============================================================================
 // SIGNAL OUTPUTS (alerts-friendly)
@@ -795,16 +939,71 @@ alertcondition(fib1State == "CONTINUATION", "Fib1 CONTINUATION", "Fib1 state is 
 alertcondition(fib1State == "RESET", "Fib1 RESET", "Fib1 state is RESET")
 
 // ============================================================================
+// BAR COLORING BY STATE
+// ============================================================================
+color stateBarColor = enableBarColor ? (
+     fib1State == "IN_POCKET" ? barColorPocket :
+     fib1State == "CONTINUATION" ? barColorContinue :
+     fib1State == "PULLBACK" ? barColorPullback :
+     fib1State == "FAILED_POCKET" ? barColorFailed :
+     fib1State == "RESET" ? barColorReset :
+     na
+) : na
+
+barcolor(stateBarColor)
+
+// ============================================================================
+// HISTORICAL PIVOT MARKERS (plotshape)
+// ============================================================================
+string.size histSize = sizeFromStr(histMarkerSize)
+bool isPivotHighBar = not na(pivotHigh)
+bool isPivotLowBar  = not na(pivotLow)
+
+plotshape(showHistMarkers and isPivotHighBar, title="Pivot High Marker",
+     style=shape.diamond, location=location.abovebar,
+     color=histHighColor, size=size.tiny, offset=-pivotLen)
+
+plotshape(showHistMarkers and isPivotLowBar, title="Pivot Low Marker",
+     style=shape.diamond, location=location.belowbar,
+     color=histLowColor, size=size.tiny, offset=-pivotLen)
+
+// ============================================================================
+// TREND ARROWS AT KEY MOMENTS
+// ============================================================================
+// Arrow up when new pivot low forms (potential reversal up)
+// Arrow down when new pivot high forms (potential reversal down)
+int arrowUp   = showTrendArrows and isPivotLowBar ? 1 : 0
+int arrowDown = showTrendArrows and isPivotHighBar ? -1 : 0
+
+plotarrow(arrowUp, title="Bullish Arrow", colorup=arrowBullColor, offset=-pivotLen, maxheight=20)
+plotarrow(arrowDown, title="Bearish Arrow", colordown=arrowBearColor, offset=-pivotLen, maxheight=20)
+
+// ============================================================================
 // TABLES (v6 compliant - using tables initialized on first bar)
 // ============================================================================
 string.size hdrSize  = sizeFromStr(tblHeaderSize)
 string.size bodySize = sizeFromStr(tblBodySize)
 color hdrBg = color.new(#2D2D2D, clampInt(tblHeaderBgOpacity, 0, 100))
 
+// State-based dynamic colors for tables
+color stateTextColor = fib1State == "IN_POCKET" ? color.green :
+     fib1State == "CONTINUATION" ? color.lime :
+     fib1State == "PULLBACK" ? color.yellow :
+     fib1State == "FAILED_POCKET" ? color.red :
+     fib1State == "RESET" ? color.gray :
+     color.white
+
+color stateBgColor = fib1State == "IN_POCKET" ? color.new(color.green, 80) :
+     fib1State == "CONTINUATION" ? color.new(color.lime, 85) :
+     fib1State == "PULLBACK" ? color.new(color.yellow, 85) :
+     fib1State == "FAILED_POCKET" ? color.new(color.red, 80) :
+     fib1State == "RESET" ? color.new(color.gray, 80) :
+     hdrBg
+
 if showInfoTable and barstate.islast and not na(infoTable)
-    // v6 text_formatting for bold headers
+    // v6 text_formatting for bold headers with state-based colors
     table.cell(infoTable, 0, 0, "Dragon Detector", text_color=color.yellow, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
-    table.cell(infoTable, 1, 0, fib1State, text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(infoTable, 1, 0, fib1State, text_color=stateTextColor, text_size=hdrSize, bgcolor=stateBgColor, text_formatting=text.format_bold)
 
     if fib1Enabled
         table.cell(infoTable, 0, 1, "Fib 1", text_color=fib1Color, text_size=bodySize, bgcolor=color.new(#2D2D2D, 30))
@@ -836,18 +1035,23 @@ if barstate.islast and showRuleTable and not na(ruleTable) and not na(fib1Active
     table.cell(ruleTable, 2, 0, "Zone", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
     table.cell(ruleTable, 3, 0, "Strikes", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
 
+    // Dynamic colors for rule status cells
+    color holdingColor = (fib1State == "CONTINUATION") ? color.lime : color.orange
+    color pocketStatusColor = inPocketR ? color.green : color.silver
+    color validityColor = fib1Invalidated ? color.red : color.lime
+
     table.cell(ruleTable, 0, 1, "0.618", text_color=color.white, text_size=bodySize)
-    table.cell(ruleTable, 1, 1, (fib1State == "CONTINUATION") ? "Holding" : "Not Holding", text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 1, 1, (fib1State == "CONTINUATION") ? "✓ Holding" : "✗ Not Holding", text_color=holdingColor, text_size=bodySize, bgcolor=color.new(holdingColor, 90))
     table.cell(ruleTable, 2, 1, z618, text_color=color.white, text_size=bodySize)
     table.cell(ruleTable, 3, 1, s618, text_color=color.white, text_size=bodySize)
 
     table.cell(ruleTable, 0, 2, "Pocket", text_color=color.white, text_size=bodySize)
-    table.cell(ruleTable, 1, 2, inPocketR ? "Inside" : "Outside", text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 1, 2, inPocketR ? "● Inside" : "○ Outside", text_color=pocketStatusColor, text_size=bodySize, bgcolor=color.new(pocketStatusColor, 90))
     table.cell(ruleTable, 2, 2, str.tostring(math.min(p618R, p650R), format.mintick) + " to " + str.tostring(math.max(p618R, p650R), format.mintick), text_color=color.white, text_size=bodySize)
     table.cell(ruleTable, 3, 2, showStrikeHints ? (str.tostring(roundToStep(math.min(p618R, p650R), strikeStep)) + " / " + str.tostring(roundToStep(math.max(p618R, p650R), strikeStep))) : "", text_color=color.white, text_size=bodySize)
 
     table.cell(ruleTable, 0, 3, "0.786", text_color=color.white, text_size=bodySize)
-    table.cell(ruleTable, 1, 3, fib1Invalidated ? "Invalidated" : "Valid", text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 1, 3, fib1Invalidated ? "⚠ Invalidated" : "✓ Valid", text_color=validityColor, text_size=bodySize, bgcolor=color.new(validityColor, 90))
     table.cell(ruleTable, 2, 3, z786, text_color=color.white, text_size=bodySize)
     table.cell(ruleTable, 3, 3, s786, text_color=color.white, text_size=bodySize)
 
