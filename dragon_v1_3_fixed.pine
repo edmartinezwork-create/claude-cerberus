@@ -1,0 +1,504 @@
+// This Pine Script code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// DragonTraderz-style v1.3: VWAP, pivots, 2 fib sets, 1-tick volume nodes, 2 scenarios, 1 message label,
+// plus predictive paths (zigzag) for A/B with auto-delete on invalidation.
+//@version=6
+indicator("Dragon v1.3: VWAP + Pivots + Dual Fibs + Nodes + Paths (2 Scenarios)", overlay=true, max_lines_count=500, max_labels_count=250)
+// ============================================================================
+// Inputs
+// ============================================================================
+groupCore = "Core"
+src = input.source(hlc3, "VWAP Source", group=groupCore, display=display.none)
+pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupCore, display=display.none)
+vpLookback = input.int(200, "Volume Nodes Lookback (bars)", minval=50, maxval=600, group=groupCore, display=display.none)
+showPivots = input.bool(true, "Show Pivot Markers", group=groupCore, display=display.none)
+groupFibs = "Fibs"
+showFibs = input.bool(true, "Show Fib Lines (Macro + Micro)", group=groupFibs, display=display.none)
+showMacroRetrace = input.bool(true, "Show Macro Retracements", group=groupFibs, display=display.none)
+showMacroExt = input.bool(true, "Show Macro Extensions", group=groupFibs, display=display.none)
+showMicroRetrace = input.bool(true, "Show Micro Retracements", group=groupFibs, display=display.none)
+showMicroExt = input.bool(true, "Show Micro Extensions", group=groupFibs, display=display.none)
+fibMacroCol = input.color(color.rgb(230, 151, 67), "Macro Fib Color", group=groupFibs, display=display.none)
+fibMacroWidth = input.int(1, "Macro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
+fibMacroStyle = input.string("Dotted", "Macro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
+fibMicroCol = input.color(color.rgb(64, 180, 170), "Micro Fib Color", group=groupFibs, display=display.none)
+fibMicroWidth = input.int(1, "Micro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
+fibMicroStyle = input.string("Dashed", "Micro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
+groupNodes = "Nodes"
+showNodes = input.bool(true, "Show POC/HVN/LVN", group=groupNodes, display=display.none)
+nodePocCol = input.color(color.rgb(126, 134, 143), "POC Color", group=groupNodes, display=display.none)
+nodeHvnCol = input.color(color.new(color.rgb(126, 134, 143), 35), "HVN Color", group=groupNodes, display=display.none)
+nodeLvnCol = input.color(color.new(color.rgb(126, 134, 143), 60), "LVN Color", group=groupNodes, display=display.none)
+nodeWidth = input.int(1, "Node Width", minval=1, maxval=5, group=groupNodes, display=display.none)
+nodeStyle = input.string("Solid", "Node Style", options=["Solid","Dotted","Dashed"], group=groupNodes, display=display.none)
+groupScen = "Scenarios"
+useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, display=display.none)
+showScenarioLines = input.bool(true, "Show Scenario Trigger/Targets", group=groupScen, display=display.none)
+scenTrigCol = input.color(color.rgb(212, 175, 55), "Trigger Color", group=groupScen, display=display.none)
+scenACol = input.color(color.rgb(61, 170, 106), "Scenario A Target Color", group=groupScen, display=display.none)
+scenBCol = input.color(color.rgb(205, 78, 76), "Scenario B Target Color", group=groupScen, display=display.none)
+scenWidth = input.int(2, "Scenario Line Width", minval=1, maxval=5, group=groupScen, display=display.none)
+scenStyle = input.string("Solid", "Scenario Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
+groupPath = "Paths"
+showPaths = input.bool(true, "Show Predictive Paths", group=groupPath, display=display.none)
+pathBars = input.int(18, "Path Forward Bars", minval=6, maxval=200, group=groupPath, display=display.none)
+pathStep = input.int(6, "Path Segment Step (bars)", minval=2, maxval=50, group=groupPath, display=display.none)
+pathACol = input.color(color.rgb(61, 170, 106), "Path A Color", group=groupPath, display=display.none)
+pathBCol = input.color(color.rgb(205, 78, 76), "Path B Color", group=groupPath, display=display.none)
+pathWidth = input.int(2, "Path Width", minval=1, maxval=5, group=groupPath, display=display.none)
+pathStyle = input.string("Solid", "Path Style", options=["Solid","Dotted","Dashed"], group=groupPath, display=display.none)
+groupMsg = "Message"
+labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
+labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
+labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
+labelStyleOpt = input.string("Left", "Message Label Style", options=["Left","Up","Down"], group=groupMsg, display=display.none)
+msgXOffset = input.int(60, "Message X offset (bars)", minval=10, maxval=300, group=groupMsg, display=display.none)
+msgYOffsetTicks = input.int(-600, "Message Y offset (ticks)", minval=-5000, maxval=5000, group=groupMsg, display=display.none)
+// Optional: hidden VWAP plot on price scale (off by default)
+showVwapPlot = input.bool(false, "Show VWAP on price scale", display=display.none)
+showVwapOnChart = input.bool(true, "Show VWAP on chart", group=groupCore, display=display.none)
+vwapWidth = input.int(2, "VWAP Width", minval=1, maxval=5, group=groupCore, display=display.none)
+vwapCol = input.color(color.rgb(60, 120, 200), "VWAP Color", group=groupCore, display=display.none)
+groupWaves = "Elliott"
+showWaves = input.bool(true, "Show Elliott Wave Scaffold", group=groupWaves, display=display.none)
+waveCol = input.color(color.rgb(170, 120, 210), "Wave Color", group=groupWaves, display=display.none)
+waveWidth = input.int(1, "Wave Width", minval=1, maxval=5, group=groupWaves, display=display.none)
+waveStyle = input.string("Dotted", "Wave Style", options=["Solid","Dotted","Dashed"], group=groupWaves, display=display.none)
+// ============================================================================
+// Helpers
+// ============================================================================
+f_lineStyle(_s) =>
+    switch _s
+        "Dotted" => line.style_dotted
+        "Dashed" => line.style_dashed
+        => line.style_solid
+f_labelStyle(_s) =>
+    switch _s
+        "Left" => label.style_label_left
+        "Up" => label.style_label_up
+        => label.style_label_down
+f_size(_s) =>
+    switch _s
+        "Tiny" => size.tiny
+        "Small" => size.small
+        "Normal" => size.normal
+        => size.large
+f_fibLevel(_a, _b, _ratio) =>
+    _a + (_b - _a) * _ratio
+f_clearLines(_arr) =>
+    int n = array.size(_arr)
+    if n > 0
+        for k = n - 1 to 0
+            line.delete(array.get(_arr, k))
+        array.clear(_arr)
+f_clearBoxes(_arr) =>
+    int n = array.size(_arr)
+    if n > 0
+        for k = n - 1 to 0
+            box.delete(array.get(_arr, k))
+        array.clear(_arr)
+f_hline(_arr, _y, _x1, _x2, _col, _style, _w) =>
+    if not na(_y)
+        line ln = line.new(_x1, _y, _x2, _y, xloc=xloc.bar_index, extend=extend.none, color=_col, style=_style, width=_w)
+        array.push(_arr, ln)
+f_seg(_arr, _x1, _y1, _x2, _y2, _col, _style, _w) =>
+    if not na(_y1) and not na(_y2)
+        line ln = line.new(_x1, _y1, _x2, _y2, xloc=xloc.bar_index, extend=extend.none, color=_col, style=_style, width=_w)
+        array.push(_arr, ln)
+f_pushLevel(_arr, _val) =>
+    if not na(_val)
+        array.push(_arr, _val)
+f_pushWave(_bars, _prices, _bar, _price, _max) =>
+    array.push(_bars, _bar)
+    array.push(_prices, _price)
+    if array.size(_bars) > _max
+        array.shift(_bars)
+        array.shift(_prices)
+
+var int[] waveBars = array.new_int()
+var float[] wavePrices = array.new_float()
+var int[] waveDirs = array.new_int()
+
+
+f_updateWave(_bars, _prices, _dirs, _bar, _price, _dir, _max) =>
+    int n = array.size(_bars)
+    if n == 0
+        // First wave point
+        array.push(_bars, _bar)
+        array.push(_prices, _price)
+        array.push(_dirs, _dir)
+    else
+        int lastIdx = n - 1
+        int lastDir = array.get(_dirs, lastIdx)
+        if lastDir == _dir
+            // Same direction - update if more extreme
+            float lastPrice = array.get(_prices, lastIdx)
+            bool moreExtreme = (_dir == 1 and _price > lastPrice) or (_dir == -1 and _price < lastPrice)
+            if moreExtreme
+                array.set(_bars, lastIdx, _bar)
+                array.set(_prices, lastIdx, _price)
+        else
+            // Direction change - add new point
+            array.push(_bars, _bar)
+            array.push(_prices, _price)
+            array.push(_dirs, _dir)
+            // Limit size
+            if array.size(_bars) > _max
+                array.shift(_bars)
+                array.shift(_prices)
+                array.shift(_dirs)
+
+// Zigzag path builder that honors pathBars/pathStep.
+// _dirBias: +1 for A, -1 for B. It flips the zigzag bias.
+f_buildPath(_outLines, _x0, _y0, _levels, _col, _style, _w, _dirBias, _segCount) =>
+    int lvN = array.size(_levels)
+    if lvN > 0 and _segCount > 0
+        float prevLevel = _y0
+        float prevZ = _y0
+        for i = 0 to _segCount - 1
+            int xi1 = _x0 + (i + 1) * pathStep
+            float lvl = array.get(_levels, i % lvN)
+            float amp = math.abs(lvl - prevLevel) * 0.18
+            int alt = 1
+            if (i % 2) != 0
+                alt := -1
+            int sgn = alt * _dirBias
+            float zi = lvl + amp * sgn
+            f_seg(_outLines, _x0 + i * pathStep, prevZ, xi1, zi, _col, _style, _w)
+            prevLevel := lvl
+            prevZ := zi
+// ============================================================================
+// Session VWAP
+// ============================================================================
+vwapVal = ta.vwap(src)
+plot(showVwapOnChart ? vwapVal : na, "Session VWAP", linewidth=vwapWidth, color=vwapCol, trackprice=false, display=display.all - display.price_scale)
+plot(showVwapPlot ? vwapVal : na, title="VWAP (Scale)", display=showVwapPlot ? display.all : display.none, trackprice=false)
+// ============================================================================
+// Pivots (confirmed only, non-repainting once printed)
+// ============================================================================
+ph = ta.pivothigh(high, pivotLen, pivotLen)
+pl = ta.pivotlow(low, pivotLen, pivotLen)
+var float lastPivotHigh = na
+var int lastPivotHighBar = na
+var float lastPivotLow = na
+var int lastPivotLowBar = na
+if not na(ph)
+    lastPivotHigh := ph
+    lastPivotHighBar := bar_index - pivotLen
+    f_updateWave(waveBars, wavePrices, waveDirs, bar_index - pivotLen, ph, 1, 5)
+if not na(pl)
+    lastPivotLow := pl
+    lastPivotLowBar := bar_index - pivotLen
+    f_updateWave(waveBars, wavePrices, waveDirs, bar_index - pivotLen, pl, -1, 5)
+if showPivots and not na(ph)
+    label.new(bar_index - pivotLen, ph, "PH", style=label.style_label_down, textcolor=color.white, color=color.rgb(60, 120, 200), size=size.tiny)
+if showPivots and not na(pl)
+    label.new(bar_index - pivotLen, pl, "PL", style=label.style_label_up, textcolor=color.white, color=color.rgb(60, 120, 200), size=size.tiny)
+// ============================================================================
+// Macro Fib: day high/low proxy using day change
+// ============================================================================
+isNewDay = ta.change(time("D")) != 0
+var float sessHigh = na
+var float sessLow = na
+var int sessStartBar = na
+if isNewDay
+    sessHigh := high
+    sessLow := low
+    sessStartBar := bar_index
+else
+    sessHigh := na(sessHigh) ? high : math.max(sessHigh, high)
+    sessLow := na(sessLow) ? low : math.min(sessLow, low)
+macroA = sessLow
+macroB = sessHigh
+macroFib50 = f_fibLevel(macroA, macroB, 0.5)
+macroFib618 = f_fibLevel(macroA, macroB, 0.618)
+macroExt1272 = f_fibLevel(macroA, macroB, 1.272)
+macroExt1618 = f_fibLevel(macroA, macroB, 1.618)
+// ============================================================================
+// Micro Fib: last impulse leg based on latest confirmed pivots
+// ============================================================================
+var float microA = na
+var float microB = na
+var bool microUp = false
+var int microStartBar = na
+if not na(lastPivotHighBar) and not na(lastPivotLowBar)
+    if lastPivotHighBar > lastPivotLowBar
+        microA := lastPivotLow
+        microB := lastPivotHigh
+        microUp := true
+        microStartBar := math.min(lastPivotHighBar, lastPivotLowBar)
+    else
+        microA := lastPivotHigh
+        microB := lastPivotLow
+        microUp := false
+        microStartBar := math.min(lastPivotHighBar, lastPivotLowBar)
+microFib50 = na(microA) ? na : f_fibLevel(microA, microB, 0.5)
+microFib618 = na(microA) ? na : f_fibLevel(microA, microB, 0.618)
+microExt1272 = na(microA) ? na : f_fibLevel(microA, microB, 1.272)
+microExt1618 = na(microA) ? na : f_fibLevel(microA, microB, 1.618)
+// ============================================================================
+// 1-bin-per-tick Volume Node Proxy (POC/HVN/LVN)
+// ============================================================================
+tick = syminfo.mintick
+lb = math.min(vpLookback, bar_index + 1)
+var float poc = na
+var float hvn = na
+var float lvn = na
+var float[] binPrice = array.new_float()
+var float[] binVol = array.new_float()
+if barstate.islast
+    array.clear(binPrice)
+    array.clear(binVol)
+    for i = 0 to lb - 1
+        float pRaw = close[i]
+        float pBin = math.round(pRaw / tick) * tick
+        float v = volume[i]
+        int found = -1
+        int nBins = array.size(binPrice)
+        if nBins > 0
+            for j = 0 to nBins - 1
+                if array.get(binPrice, j) == pBin
+                    found := j
+                    break
+        if found == -1
+            array.push(binPrice, pBin)
+            array.push(binVol, v)
+        else
+            array.set(binVol, found, array.get(binVol, found) + v)
+    float maxVol = na
+    float secondVol = na
+    float minVol = na
+    float maxPrice = na
+    float secondPrice = na
+    float minPrice = na
+    int sz = array.size(binPrice)
+    if sz > 0
+        for j = 0 to sz - 1
+            float pv = array.get(binVol, j)
+            float pp = array.get(binPrice, j)
+            if na(minVol) or pv < minVol
+                minVol := pv
+                minPrice := pp
+            if na(maxVol) or pv > maxVol
+                secondVol := maxVol
+                secondPrice := maxPrice
+                maxVol := pv
+                maxPrice := pp
+            else
+                if (na(secondVol) or pv > secondVol) and pv < maxVol
+                    secondVol := pv
+                    secondPrice := pp
+    poc := maxPrice
+    hvn := secondPrice
+    lvn := minPrice
+// ============================================================================
+// Scenario logic and state (live updates)
+// ============================================================================
+float trig = na
+if useMicro618AsTrigger
+    trig := microFib618
+else
+    trig := microFib50
+float targetA = na
+float targetB = na
+if not na(microExt1272) and not na(hvn)
+    targetA := math.max(microExt1272, hvn)
+else
+    targetA := na(microExt1272) ? hvn : microExt1272
+if not na(poc) and not na(lvn)
+    targetB := math.min(poc, lvn)
+else
+    targetB := na(poc) ? lvn : poc
+bool trigReady = not na(trig)
+bool vwapReady = not na(vwapVal)
+bool condAboveTrig = trigReady and close > trig
+bool condBelowTrig = trigReady and close < trig
+bool scenA_now = vwapReady and (close > vwapVal) and condAboveTrig
+bool scenB_now = vwapReady and (close < vwapVal) and condBelowTrig
+bool invalidA_now = vwapReady and ((close < vwapVal) or condBelowTrig)
+bool invalidB_now = vwapReady and ((close > vwapVal) or condAboveTrig)
+var int activeScen = 0  // 1=A, -1=B, 0=none/undecided
+if barstate.isconfirmed or barstate.isrealtime
+    if activeScen == 1 and invalidA_now
+        activeScen := 0
+    else
+        if activeScen == -1 and invalidB_now
+            activeScen := 0
+    if activeScen == 0
+        if scenA_now and not scenB_now
+            activeScen := 1
+        else
+            if scenB_now and not scenA_now
+                activeScen := -1
+// ============================================================================
+// Drawing management
+// ============================================================================
+var line[] fibLines = array.new_line()
+var label[] fibLabels = array.new_label()
+var line[] nodeLines = array.new_line()
+var line[] scenLines = array.new_line()
+var box[] scenBoxes = array.new_box()
+var line[] pathLinesA = array.new_line()
+var line[] pathLinesB = array.new_line()
+var line[] waveLines = array.new_line()
+var label[] waveLabels = array.new_label()
+var label msgLabel = na
+var float[] levelsA = array.new_float()
+var float[] levelsB = array.new_float()
+lineStyleMacro = f_lineStyle(fibMacroStyle)
+lineStyleMicro = f_lineStyle(fibMicroStyle)
+lineStyleNodes = f_lineStyle(nodeStyle)
+lineStyleScen = f_lineStyle(scenStyle)
+lineStylePath = f_lineStyle(pathStyle)
+lineStyleWave = f_lineStyle(waveStyle)
+lblStyle = f_labelStyle(labelStyleOpt)
+lblSize = f_size(labelSizeOpt)
+int segCount = math.floor(pathBars / pathStep)
+if segCount < 1
+    segCount := 1
+if segCount > 50
+    segCount := 50
+if barstate.islast
+    // Message placement. Anchor on close to reduce overlaps during spikes.
+    int msgX = bar_index + msgXOffset
+    float msgY = close + syminfo.mintick * msgYOffsetTicks
+    f_clearLines(fibLines)
+    f_clearLines(nodeLines)
+    f_clearLines(scenLines)
+    f_clearLines(pathLinesA)
+    f_clearLines(pathLinesB)
+    f_clearLines(waveLines)
+    f_clearBoxes(scenBoxes)
+    if array.size(fibLabels) > 0
+        for k = array.size(fibLabels) - 1 to 0
+            label.delete(array.get(fibLabels, k))
+        array.clear(fibLabels)
+    if array.size(waveLabels) > 0
+        for k = array.size(waveLabels) - 1 to 0
+            label.delete(array.get(waveLabels, k))
+        array.clear(waveLabels)
+    if not na(msgLabel)
+        label.delete(msgLabel)
+    int rightX = bar_index + 130
+    int clampLeft = bar_index - 130
+    int macroLeftX = na(sessStartBar) ? clampLeft : math.max(sessStartBar, clampLeft)
+    int microLeftX = na(microStartBar) ? clampLeft : math.max(microStartBar, clampLeft)
+    if showFibs
+        int macroLabelX = macroLeftX - 3
+        int microLabelX = microLeftX - 3
+        if showMacroRetrace
+            f_hline(fibLines, macroFib50, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
+            f_hline(fibLines, macroFib618, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
+            if not na(macroFib50)
+                array.push(fibLabels, label.new(macroLabelX, macroFib50, "(0.5, " + str.tostring(macroFib50, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
+            if not na(macroFib618)
+                array.push(fibLabels, label.new(macroLabelX, macroFib618, "(0.618, " + str.tostring(macroFib618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
+        if showMacroExt
+            f_hline(fibLines, macroExt1272, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
+            f_hline(fibLines, macroExt1618, macroLeftX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth)
+            if not na(macroExt1272)
+                array.push(fibLabels, label.new(macroLabelX, macroExt1272, "(1.272, " + str.tostring(macroExt1272, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
+            if not na(macroExt1618)
+                array.push(fibLabels, label.new(macroLabelX, macroExt1618, "(1.618, " + str.tostring(macroExt1618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMacroCol, color=color.new(fibMacroCol, 90), style=label.style_label_left, size=size.small))
+        if showMicroRetrace
+            f_hline(fibLines, microFib50, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
+            f_hline(fibLines, microFib618, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
+            if not na(microFib50)
+                array.push(fibLabels, label.new(microLabelX, microFib50, "(0.5, " + str.tostring(microFib50, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
+            if not na(microFib618)
+                array.push(fibLabels, label.new(microLabelX, microFib618, "(0.618, " + str.tostring(microFib618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
+        if showMicroExt
+            f_hline(fibLines, microExt1272, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
+            f_hline(fibLines, microExt1618, microLeftX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth)
+            if not na(microExt1272)
+                array.push(fibLabels, label.new(microLabelX, microExt1272, "(1.272, " + str.tostring(microExt1272, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
+            if not na(microExt1618)
+                array.push(fibLabels, label.new(microLabelX, microExt1618, "(1.618, " + str.tostring(microExt1618, format.mintick) + ")", xloc=xloc.bar_index, yloc=yloc.price, textcolor=fibMicroCol, color=color.new(fibMicroCol, 90), style=label.style_label_left, size=size.small))
+    if showNodes
+        f_hline(nodeLines, poc, clampLeft, rightX, nodePocCol, lineStyleNodes, nodeWidth)
+        f_hline(nodeLines, hvn, clampLeft, rightX, nodeHvnCol, lineStyleNodes, nodeWidth)
+        f_hline(nodeLines, lvn, clampLeft, rightX, nodeLvnCol, lineStyleNodes, nodeWidth)
+    if showScenarioLines
+        if not na(trig)
+            f_hline(scenLines, trig, clampLeft, rightX, scenTrigCol, lineStyleScen, scenWidth)
+        bool canGreen = not na(trig) and not na(targetA)
+        bool canRed = not na(trig) and not na(targetB)
+        float greenTop = canGreen ? math.max(trig, targetA) : na
+        float greenBot = canGreen ? math.min(trig, targetA) : na
+        float redTop = canRed ? math.max(trig, targetB) : na
+        float redBot = canRed ? math.min(trig, targetB) : na
+        if not na(targetA)
+            f_hline(scenLines, targetA, clampLeft, rightX, scenACol, lineStyleScen, scenWidth)
+        if not na(targetB)
+            f_hline(scenLines, targetB, clampLeft, rightX, scenBCol, lineStyleScen, scenWidth)
+        if activeScen == 1 and canGreen
+            array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=pathACol))
+        if activeScen == -1 and canRed
+            array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=pathBCol))
+        if activeScen == 0
+            if canGreen
+                array.push(scenBoxes, box.new(clampLeft, greenTop, rightX, greenBot, xloc=xloc.bar_index, bgcolor=color.new(pathACol, 95), border_color=pathACol))
+            if canRed
+                array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=pathBCol))
+    // Predictive paths. Shows both when undecided, otherwise only the active branch.
+    if showPaths
+        array.clear(levelsA)
+        array.clear(levelsB)
+        // A magnets (upside bias)
+        f_pushLevel(levelsA, trig)
+        f_pushLevel(levelsA, targetA)
+        f_pushLevel(levelsA, microExt1618)
+        f_pushLevel(levelsA, macroExt1618)
+        f_pushLevel(levelsA, hvn)
+        // B magnets (downside bias)
+        f_pushLevel(levelsB, trig)
+        f_pushLevel(levelsB, targetB)
+        f_pushLevel(levelsB, lvn)
+        f_pushLevel(levelsB, macroFib50)
+        f_pushLevel(levelsB, poc)
+        bool showAPath = (activeScen == 1) or (activeScen == 0)
+        bool showBPath = (activeScen == -1) or (activeScen == 0)
+        if showAPath
+            f_buildPath(pathLinesA, bar_index, close, levelsA, pathACol, lineStylePath, pathWidth, 1, segCount)
+        if showBPath
+            f_buildPath(pathLinesB, bar_index, close, levelsB, pathBCol, lineStylePath, pathWidth, -1, segCount)
+
+    if showWaves
+        int waveCount = array.size(waveBars)
+        if waveCount > 1
+            for i = 1 to waveCount - 1
+                int x1 = array.get(waveBars, i - 1)
+                int x2 = array.get(waveBars, i)
+                float y1 = array.get(wavePrices, i - 1)
+                float y2 = array.get(wavePrices, i)
+                f_seg(waveLines, x1, y1, x2, y2, waveCol, lineStyleWave, waveWidth)
+        if waveCount > 0
+            for i = 0 to waveCount - 1
+                string wName = "(" + str.tostring(i + 1) + ")"
+                array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wName, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveCol, color=color.new(waveCol, 100), style=label.style_none, size=size.small))
+    // One message label (multiline)
+    string msg = "SCAN\n"
+    if activeScen == 1
+        msg := "A (Hold)\nAbove VWAP"
+        if not na(trig)
+            msg := msg + "\n\nAbove trigger: " + str.tostring(trig, format.mintick)
+        if not na(targetA)
+            msg := msg + "\n\nTarget: " + str.tostring(targetA, format.mintick)
+        msg := msg + "\n\nInvalidate: close below VWAP"
+        if not na(trig)
+            msg := msg + "\nOr below trigger"
+    else
+        if activeScen == -1
+            msg := "B (Fail)\nBelow VWAP"
+            if not na(trig)
+                msg := msg + "\n\nBelow trigger: " + str.tostring(trig, format.mintick)
+            if not na(targetB)
+                msg := msg + "\n\nTarget: " + str.tostring(targetB, format.mintick)
+            msg := msg + "\n\nInvalidate: close above VWAP"
+            if not na(trig)
+                msg := msg + "\nOr above trigger"
+        else
+            msg := "CHOP/UNDECIDED\nNear VWAP and trigger\nWait for confirmation"
+    msgLabel := label.new(msgX, msgY, msg, style=lblStyle, textalign=text.align_left, size=lblSize, textcolor=labelTextCol, color=labelBgCol, xloc=xloc.bar_index, yloc=yloc.price)
+// Contextual alertconditions only (not trade signals)
+alertcondition(close > vwapVal, "Above VWAP", "Close is above VWAP.")
+alertcondition(close < vwapVal, "Below VWAP", "Close is below VWAP.")
