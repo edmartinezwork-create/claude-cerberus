@@ -461,6 +461,8 @@ var line[] pathLinesA = array.new_line()
 var line[] pathLinesB = array.new_line()
 var line[] waveLines = array.new_line()
 var label[] waveLabels = array.new_label()
+var box[] vrvpBoxes = array.new_box()
+var line[] vrvpLines = array.new_line()
 var label msgLabel = na
 var float[] levelsA = array.new_float()
 var float[] levelsB = array.new_float()
@@ -495,6 +497,8 @@ if barstate.islast
     f_clearLines(pathLinesB)
     f_clearLines(waveLines)
     f_clearBoxes(scenBoxes)
+    f_clearBoxes(vrvpBoxes)
+    f_clearLines(vrvpLines)
 
     if array.size(fibLabels) > 0
         for k = array.size(fibLabels) - 1 to 0
@@ -713,40 +717,57 @@ if barstate.islast
         // Convert line style
         string vrvpStyleConvert = vrvpLineStyle == "Solid" ? line.style_solid : vrvpLineStyle == "Dotted" ? line.style_dotted : line.style_dashed
 
-        // Draw VRVP histogram bars
+        // Draw VRVP histogram bars as boxes
         int vrvpLeftBar = bar_index - vrvpBars
         int vrvpBaseX = vrvpPlacement == "Right" ? bar_index : vrvpLeftBar
         int vrvpMaxWidth = math.round(vrvpBars * vrvpWidth / 100.0)
 
         if vrvpSize > 0 and vrvpMaxVol > 0
+            // Draw histogram boxes
             for j = 0 to vrvpSize - 1
                 float p = array.get(vrvpBinPrice, j)
                 float v = array.get(vrvpBinVol, j)
                 float volPct = v / vrvpMaxVol
                 int barLength = math.round(volPct * vrvpMaxWidth)
 
-                // Determine color based on POC/VAH/VAL
-                color barColor = vrvpProfileCol
-                int barWidth = 1
-                string barStyle = line.style_solid
-
-                if p == vrvpPocPrice
-                    barColor := vrvpPocCol
-                    barWidth := vrvpLineWidth
-                    barStyle := vrvpStyleConvert
-                else if p == vrvpVahPrice
-                    barColor := vrvpVahCol
-                    barWidth := vrvpLineWidth
-                    barStyle := vrvpStyleConvert
-                else if p == vrvpValPrice
-                    barColor := vrvpValCol
-                    barWidth := vrvpLineWidth
-                    barStyle := vrvpStyleConvert
-
+                // Calculate box coordinates
+                float boxTop = p + (vrvpTick / 2.0)
+                float boxBottom = p - (vrvpTick / 2.0)
                 int x1 = vrvpBaseX
                 int x2 = vrvpPlacement == "Right" ? vrvpBaseX + barLength : vrvpBaseX - barLength
 
-                line.new(x1, p, x2, p, xloc=xloc.bar_index, color=barColor, style=barStyle, width=barWidth)
+                // Draw histogram bar as box
+                box histBox = box.new(x1, boxTop, x2, boxBottom,
+                     xloc=xloc.bar_index,
+                     bgcolor=vrvpProfileCol,
+                     border_color=vrvpProfileCol,
+                     border_width=1)
+                array.push(vrvpBoxes, histBox)
+
+            // Draw POC, VAH, VAL as prominent lines over the histogram
+            if not na(vrvpPocPrice)
+                int lineStart = vrvpBaseX
+                int lineEnd = vrvpPlacement == "Right" ? vrvpBaseX + vrvpMaxWidth : vrvpBaseX - vrvpMaxWidth
+                line pocLine = line.new(lineStart, vrvpPocPrice, lineEnd, vrvpPocPrice,
+                     xloc=xloc.bar_index, color=vrvpPocCol,
+                     style=vrvpStyleConvert, width=vrvpLineWidth)
+                array.push(vrvpLines, pocLine)
+
+            if not na(vrvpVahPrice)
+                int lineStart = vrvpBaseX
+                int lineEnd = vrvpPlacement == "Right" ? vrvpBaseX + vrvpMaxWidth : vrvpBaseX - vrvpMaxWidth
+                line vahLine = line.new(lineStart, vrvpVahPrice, lineEnd, vrvpVahPrice,
+                     xloc=xloc.bar_index, color=vrvpVahCol,
+                     style=vrvpStyleConvert, width=vrvpLineWidth)
+                array.push(vrvpLines, vahLine)
+
+            if not na(vrvpValPrice)
+                int lineStart = vrvpBaseX
+                int lineEnd = vrvpPlacement == "Right" ? vrvpBaseX + vrvpMaxWidth : vrvpBaseX - vrvpMaxWidth
+                line valLine = line.new(lineStart, vrvpValPrice, lineEnd, vrvpValPrice,
+                     xloc=xloc.bar_index, color=vrvpValCol,
+                     style=vrvpStyleConvert, width=vrvpLineWidth)
+                array.push(vrvpLines, valLine)
 
     // Draw message label
     string msg = "SCAN\n"
