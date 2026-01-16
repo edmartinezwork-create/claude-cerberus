@@ -39,6 +39,7 @@ nodeStyle = input.string("Solid", "Node Style", options=["Solid","Dotted","Dashe
 
 groupVRVP = "Visible Range Volume Profile"
 showVRVP = input.bool(false, "Show VRVP", group=groupVRVP, display=display.none)
+vrvpLookback = input.int(100, "VRVP Lookback (bars)", minval=10, maxval=500, group=groupVRVP, display=display.none)
 vrvpRowSize = input.int(50, "Row Size", minval=10, maxval=500, group=groupVRVP, display=display.none)
 vrvpWidth = input.int(35, "Profile Width (%)", minval=5, maxval=100, group=groupVRVP, display=display.none)
 vrvpPlacement = input.string("Right", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
@@ -628,10 +629,8 @@ if barstate.islast
 
     // Draw Visible Range Volume Profile (VRVP)
     if showVRVP
-        // Calculate visible bar range
-        int visibleBars = last_bar_index - chart.left_visible_bar_index + 1
-        int vrvpStart = math.max(0, last_bar_index - visibleBars + 1)
-        int vrvpBars = last_bar_index - vrvpStart + 1
+        // Calculate lookback range
+        int vrvpBars = math.min(vrvpLookback, bar_index + 1)
 
         // Build VRVP bins
         var float[] vrvpBinPrice = array.new_float()
@@ -641,26 +640,24 @@ if barstate.islast
 
         float vrvpTick = syminfo.mintick * vrvpRowSize
 
-        // Collect volume data for visible range
-        for i = 0 to math.min(vrvpBars - 1, 4999)
-            int barIdx = last_bar_index - i
-            if barIdx >= 0
-                float pRaw = close[i]
-                float pBin = math.round(pRaw / vrvpTick) * vrvpTick
-                float v = volume[i]
+        // Collect volume data for lookback range
+        for i = 0 to vrvpBars - 1
+            float pRaw = close[i]
+            float pBin = math.round(pRaw / vrvpTick) * vrvpTick
+            float v = volume[i]
 
-                int foundIdx = -1
-                int nBins = array.size(vrvpBinPrice)
-                for j = 0 to nBins - 1
-                    if array.get(vrvpBinPrice, j) == pBin
-                        foundIdx := j
-                        break
+            int foundIdx = -1
+            int nBins = array.size(vrvpBinPrice)
+            for j = 0 to nBins - 1
+                if array.get(vrvpBinPrice, j) == pBin
+                    foundIdx := j
+                    break
 
-                if foundIdx == -1
-                    array.push(vrvpBinPrice, pBin)
-                    array.push(vrvpBinVol, v)
-                else
-                    array.set(vrvpBinVol, foundIdx, array.get(vrvpBinVol, foundIdx) + v)
+            if foundIdx == -1
+                array.push(vrvpBinPrice, pBin)
+                array.push(vrvpBinVol, v)
+            else
+                array.set(vrvpBinVol, foundIdx, array.get(vrvpBinVol, foundIdx) + v)
 
         // Find max volume for scaling
         float vrvpMaxVol = 0.0
@@ -716,9 +713,9 @@ if barstate.islast
         string vrvpStyleConvert = vrvpLineStyle == "Solid" ? line.style_solid : vrvpLineStyle == "Dotted" ? line.style_dotted : line.style_dashed
 
         // Draw VRVP histogram bars
-        int vrvpBaseX = vrvpPlacement == "Right" ? last_bar_index : chart.left_visible_bar_index
-        int vrvpBarsRange = last_bar_index - chart.left_visible_bar_index
-        int vrvpMaxWidth = math.round(vrvpBarsRange * vrvpWidth / 100.0)
+        int vrvpLeftBar = bar_index - vrvpBars
+        int vrvpBaseX = vrvpPlacement == "Right" ? bar_index : vrvpLeftBar
+        int vrvpMaxWidth = math.round(vrvpBars * vrvpWidth / 100.0)
 
         if vrvpSize > 0 and vrvpMaxVol > 0
             for j = 0 to vrvpSize - 1
