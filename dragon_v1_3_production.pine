@@ -39,16 +39,17 @@ nodeStyle = input.string("Solid", "Node Style", options=["Solid","Dotted","Dashe
 
 groupVRVP = "Visible Range Volume Profile"
 showVRVP = input.bool(false, "Show VRVP", group=groupVRVP, display=display.none)
-vrvpLookback = input.int(100, "VRVP Lookback (bars)", minval=10, maxval=500, group=groupVRVP, display=display.none)
-vrvpRowSize = input.int(50, "Row Size", minval=10, maxval=500, group=groupVRVP, display=display.none)
-vrvpWidth = input.int(35, "Profile Width (%)", minval=5, maxval=100, group=groupVRVP, display=display.none)
+vrvpRows = input.int(100, "Rows (Resolution)", minval=10, maxval=500, group=groupVRVP, display=display.none)
+vrvpWidth = input.int(40, "Profile Width (%)", minval=1, maxval=100, group=groupVRVP, display=display.none)
+vrvpValueArea = input.int(70, "Value Area (%)", minval=0, maxval=100, group=groupVRVP, display=display.none)
 vrvpPlacement = input.string("Right", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
-vrvpProfileCol = input.color(color.new(color.rgb(120, 123, 134), 50), "Profile Color", group=groupVRVP, display=display.none)
-vrvpPocCol = input.color(color.rgb(255, 152, 0), "VRVP POC Color", group=groupVRVP, display=display.none)
-vrvpVahCol = input.color(color.rgb(76, 175, 80), "VRVP VAH Color", group=groupVRVP, display=display.none)
-vrvpValCol = input.color(color.rgb(244, 67, 54), "VRVP VAL Color", group=groupVRVP, display=display.none)
-vrvpLineWidth = input.int(2, "Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
-vrvpLineStyle = input.string("Solid", "Line Style", options=["Solid","Dotted","Dashed"], group=groupVRVP, display=display.none)
+vrvpUpVolumeVA = input.color(color.new(color.rgb(61, 170, 106), 30), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
+vrvpDownVolumeVA = input.color(color.new(color.rgb(205, 78, 76), 30), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
+vrvpUpVolumeOut = input.color(color.new(color.rgb(61, 170, 106), 70), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
+vrvpDownVolumeOut = input.color(color.new(color.rgb(205, 78, 76), 70), "Down Volume (Outside VA)", group=groupVRVP, display=display.none)
+vrvpPocCol = input.color(color.new(color.rgb(212, 175, 55), 30), "POC Color", group=groupVRVP, display=display.none)
+vrvpPocLineWidth = input.int(2, "POC Line Width", minval=0, maxval=5, group=groupVRVP, display=display.none)
+vrvpShowPocLabel = input.bool(true, "Show POC Label", group=groupVRVP, display=display.none)
 
 groupScen = "Scenarios"
 useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, display=display.none)
@@ -463,6 +464,7 @@ var line[] waveLines = array.new_line()
 var label[] waveLabels = array.new_label()
 var box[] vrvpBoxes = array.new_box()
 var line[] vrvpLines = array.new_line()
+var label vrvpPocLabel = na
 var label msgLabel = na
 var float[] levelsA = array.new_float()
 var float[] levelsB = array.new_float()
@@ -499,6 +501,9 @@ if barstate.islast
     f_clearBoxes(scenBoxes)
     f_clearBoxes(vrvpBoxes)
     f_clearLines(vrvpLines)
+
+    if not na(vrvpPocLabel)
+        label.delete(vrvpPocLabel)
 
     if array.size(fibLabels) > 0
         for k = array.size(fibLabels) - 1 to 0
@@ -633,141 +638,121 @@ if barstate.islast
 
     // Draw Visible Range Volume Profile (VRVP)
     if showVRVP
-        // Calculate lookback range
-        int vrvpBars = math.min(vrvpLookback, bar_index + 1)
+        // Get visible time range
+        int startTime = chart.left_visible_bar_time
+        int endTime = chart.right_visible_bar_time
 
-        // Build VRVP bins
-        var float[] vrvpBinPrice = array.new_float()
-        var float[] vrvpBinVol = array.new_float()
-        array.clear(vrvpBinPrice)
-        array.clear(vrvpBinVol)
+        // Find price range and start bar within visible time
+        float maxPrice = -1.0
+        float minPrice = 1.0e15
+        int startBarIndex = 0
 
-        float vrvpTick = syminfo.mintick * vrvpRowSize
+        for i = 0 to 4999
+            if time[i] < startTime
+                startBarIndex := i
+                break
+            float h = nz(high[i])
+            float l = nz(low[i])
+            if h > 0 and l > 0
+                maxPrice := math.max(maxPrice, h)
+                minPrice := math.min(minPrice, l)
 
-        // Collect volume data for lookback range
-        for i = 0 to vrvpBars - 1
-            float pRaw = close[i]
-            float pBin = math.round(pRaw / vrvpTick) * vrvpTick
-            float v = volume[i]
+        float priceRange = maxPrice - minPrice
 
-            int foundIdx = -1
-            int nBins = array.size(vrvpBinPrice)
-            if nBins > 0
-                for j = 0 to nBins - 1
-                    if array.get(vrvpBinPrice, j) == pBin
-                        foundIdx := j
-                        break
+        if priceRange > 0
+            float step = priceRange / vrvpRows
+            float[] volUp = array.new_float(vrvpRows, 0.0)
+            float[] volDown = array.new_float(vrvpRows, 0.0)
+            float[] volTotal = array.new_float(vrvpRows, 0.0)
+            float totalVpVolume = 0.0
 
-            if foundIdx == -1
-                array.push(vrvpBinPrice, pBin)
-                array.push(vrvpBinVol, v)
-            else
-                array.set(vrvpBinVol, foundIdx, array.get(vrvpBinVol, foundIdx) + v)
+            // Collect volume data by row
+            for i = 0 to startBarIndex
+                float avgPrice = (high[i] + low[i]) / 2
+                int rowIdx = math.floor((avgPrice - minPrice) / step)
+                rowIdx := math.min(math.max(rowIdx, 0), vrvpRows - 1)
 
-        // Find max volume for scaling
-        float vrvpMaxVol = 0.0
-        float vrvpTotalVol = 0.0
-        float vrvpPocPrice = na
-        int vrvpSize = array.size(vrvpBinPrice)
+                float v = nz(volume[i])
+                if v > 0
+                    totalVpVolume := totalVpVolume + v
+                    if close[i] >= open[i]
+                        array.set(volUp, rowIdx, array.get(volUp, rowIdx) + v)
+                    else
+                        array.set(volDown, rowIdx, array.get(volDown, rowIdx) + v)
+                    array.set(volTotal, rowIdx, array.get(volTotal, rowIdx) + v)
 
-        if vrvpSize > 0
-            for j = 0 to vrvpSize - 1
-                float v = array.get(vrvpBinVol, j)
-                vrvpTotalVol := vrvpTotalVol + v
-                if v > vrvpMaxVol
-                    vrvpMaxVol := v
-                    vrvpPocPrice := array.get(vrvpBinPrice, j)
+            // Find POC (row with max volume)
+            float maxVolInRow = 0.0
+            int pocIdx = -1
+            for i = 0 to vrvpRows - 1
+                float v = array.get(volTotal, i)
+                if v > maxVolInRow
+                    maxVolInRow := v
+                    pocIdx := i
 
-        // Calculate VRVP VAH and VAL (70% value area)
-        float vrvpVahPrice = na
-        float vrvpValPrice = na
+            // Calculate Value Area
+            int vaTopIdx = pocIdx
+            int vaBottomIdx = pocIdx
+            float currentVaVol = maxVolInRow
+            float targetVaVol = totalVpVolume * (vrvpValueArea / 100.0)
 
-        if vrvpSize > 0
-            var int[] vrvpSortedIdx = array.new_int()
-            array.clear(vrvpSortedIdx)
+            int loopSafety = 0
+            while currentVaVol < targetVaVol and loopSafety < vrvpRows
+                loopSafety := loopSafety + 1
+                float upVol = (vaTopIdx < vrvpRows - 1) ? array.get(volTotal, vaTopIdx + 1) : 0.0
+                float downVol = (vaBottomIdx > 0) ? array.get(volTotal, vaBottomIdx - 1) : 0.0
+                if upVol == 0 and downVol == 0
+                    break
+                if upVol >= downVol
+                    vaTopIdx := vaTopIdx + 1
+                    currentVaVol := currentVaVol + upVol
+                else
+                    vaBottomIdx := vaBottomIdx - 1
+                    currentVaVol := currentVaVol + downVol
 
-            for j = 0 to vrvpSize - 1
-                array.push(vrvpSortedIdx, j)
+            // Draw histogram
+            int timeRange = endTime - startTime
 
-            // Sort by volume descending
-            for i = 0 to vrvpSize - 2
-                for j = 0 to vrvpSize - 2 - i
-                    int idx1 = array.get(vrvpSortedIdx, j)
-                    int idx2 = array.get(vrvpSortedIdx, j + 1)
-                    if array.get(vrvpBinVol, idx1) < array.get(vrvpBinVol, idx2)
-                        array.set(vrvpSortedIdx, j, idx2)
-                        array.set(vrvpSortedIdx, j + 1, idx1)
+            for i = 0 to vrvpRows - 1
+                float totalV = array.get(volTotal, i)
+                if totalV > 0
+                    float boxBottom = minPrice + (step * i)
+                    float boxTop = minPrice + (step * (i + 1))
+                    float widthRatio = (totalV / maxVolInRow) * (vrvpWidth / 100.0)
+                    int barLenTime = math.round(timeRange * widthRatio)
 
-            // Calculate value area
-            float vrvpTargetVol = vrvpTotalVol * 0.70
-            float vrvpAccVol = 0.0
+                    int boxLeft = (vrvpPlacement == "Right") ? endTime - barLenTime : startTime
+                    int boxRight = (vrvpPlacement == "Right") ? endTime : startTime + barLenTime
 
-            for j = 0 to vrvpSize - 1
-                int idx = array.get(vrvpSortedIdx, j)
-                float v = array.get(vrvpBinVol, idx)
-                float p = array.get(vrvpBinPrice, idx)
+                    bool isVa = (i >= vaBottomIdx and i <= vaTopIdx)
+                    bool isPoc = (i == pocIdx)
+                    bool isUpBar = array.get(volUp, i) >= array.get(volDown, i)
 
-                if vrvpAccVol < vrvpTargetVol
-                    vrvpAccVol := vrvpAccVol + v
-                    if na(vrvpVahPrice) or p > vrvpVahPrice
-                        vrvpVahPrice := p
-                    if na(vrvpValPrice) or p < vrvpValPrice
-                        vrvpValPrice := p
+                    color bgColor = na
+                    if isPoc
+                        bgColor := vrvpPocCol
+                    else
+                        if isVa
+                            bgColor := isUpBar ? vrvpUpVolumeVA : vrvpDownVolumeVA
+                        else
+                            bgColor := isUpBar ? vrvpUpVolumeOut : vrvpDownVolumeOut
 
-        // Convert line style
-        string vrvpStyleConvert = vrvpLineStyle == "Solid" ? line.style_solid : vrvpLineStyle == "Dotted" ? line.style_dotted : line.style_dashed
+                    array.push(vrvpBoxes, box.new(boxLeft, boxTop, boxRight, boxBottom,
+                         xloc=xloc.bar_time, border_width=0, bgcolor=bgColor))
 
-        // Draw VRVP histogram bars as boxes
-        int vrvpLeftBar = bar_index - vrvpBars
-        int vrvpBaseX = vrvpPlacement == "Right" ? bar_index : vrvpLeftBar
-        int vrvpMaxWidth = math.round(vrvpBars * vrvpWidth / 100.0)
+                    // Draw POC line and label
+                    if isPoc
+                        float pocPrice = (boxTop + boxBottom) / 2
+                        if vrvpPocLineWidth > 0
+                            array.push(vrvpLines, line.new(startTime, pocPrice, endTime, pocPrice,
+                                 xloc=xloc.bar_time, color=vrvpPocCol, width=vrvpPocLineWidth))
 
-        if vrvpSize > 0 and vrvpMaxVol > 0
-            // Draw histogram boxes
-            for j = 0 to vrvpSize - 1
-                float p = array.get(vrvpBinPrice, j)
-                float v = array.get(vrvpBinVol, j)
-                float volPct = v / vrvpMaxVol
-                int barLength = math.round(volPct * vrvpMaxWidth)
-
-                // Calculate box coordinates
-                float boxTop = p + (vrvpTick / 2.0)
-                float boxBottom = p - (vrvpTick / 2.0)
-                int x1 = vrvpBaseX
-                int x2 = vrvpPlacement == "Right" ? vrvpBaseX + barLength : vrvpBaseX - barLength
-
-                // Draw histogram bar as box
-                box histBox = box.new(x1, boxTop, x2, boxBottom,
-                     xloc=xloc.bar_index,
-                     bgcolor=vrvpProfileCol,
-                     border_color=vrvpProfileCol,
-                     border_width=1)
-                array.push(vrvpBoxes, histBox)
-
-            // Draw POC, VAH, VAL as prominent lines over the histogram
-            if not na(vrvpPocPrice)
-                int lineStart = vrvpBaseX
-                int lineEnd = vrvpPlacement == "Right" ? vrvpBaseX + vrvpMaxWidth : vrvpBaseX - vrvpMaxWidth
-                line pocLine = line.new(lineStart, vrvpPocPrice, lineEnd, vrvpPocPrice,
-                     xloc=xloc.bar_index, color=vrvpPocCol,
-                     style=vrvpStyleConvert, width=vrvpLineWidth)
-                array.push(vrvpLines, pocLine)
-
-            if not na(vrvpVahPrice)
-                int lineStart = vrvpBaseX
-                int lineEnd = vrvpPlacement == "Right" ? vrvpBaseX + vrvpMaxWidth : vrvpBaseX - vrvpMaxWidth
-                line vahLine = line.new(lineStart, vrvpVahPrice, lineEnd, vrvpVahPrice,
-                     xloc=xloc.bar_index, color=vrvpVahCol,
-                     style=vrvpStyleConvert, width=vrvpLineWidth)
-                array.push(vrvpLines, vahLine)
-
-            if not na(vrvpValPrice)
-                int lineStart = vrvpBaseX
-                int lineEnd = vrvpPlacement == "Right" ? vrvpBaseX + vrvpMaxWidth : vrvpBaseX - vrvpMaxWidth
-                line valLine = line.new(lineStart, vrvpValPrice, lineEnd, vrvpValPrice,
-                     xloc=xloc.bar_index, color=vrvpValCol,
-                     style=vrvpStyleConvert, width=vrvpLineWidth)
-                array.push(vrvpLines, valLine)
+                        if vrvpShowPocLabel
+                            string priceText = "POC: " + str.tostring(pocPrice, format.mintick)
+                            vrvpPocLabel := label.new(x=(vrvpPlacement == "Right" ? startTime : endTime),
+                                 y=pocPrice, text=priceText, xloc=xloc.bar_time,
+                                 color=color.new(vrvpPocCol, 0), textcolor=color.black,
+                                 style=label.style_label_left, size=size.small)
 
     // Draw message label
     string msg = "SCAN\n"
