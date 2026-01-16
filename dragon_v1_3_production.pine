@@ -42,14 +42,26 @@ showVRVP = input.bool(false, "Show VRVP", group=groupVRVP, display=display.none)
 vrvpRows = input.int(100, "Rows (Resolution)", minval=10, maxval=500, group=groupVRVP, display=display.none)
 vrvpWidth = input.int(40, "Profile Width (%)", minval=1, maxval=100, group=groupVRVP, display=display.none)
 vrvpValueArea = input.int(70, "Value Area (%)", minval=0, maxval=100, group=groupVRVP, display=display.none)
-vrvpPlacement = input.string("Right", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
-vrvpUpVolumeVA = input.color(color.new(color.rgb(61, 170, 106), 30), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
-vrvpDownVolumeVA = input.color(color.new(color.rgb(205, 78, 76), 30), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
-vrvpUpVolumeOut = input.color(color.new(color.rgb(61, 170, 106), 70), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
-vrvpDownVolumeOut = input.color(color.new(color.rgb(205, 78, 76), 70), "Down Volume (Outside VA)", group=groupVRVP, display=display.none)
-vrvpPocCol = input.color(color.new(color.rgb(212, 175, 55), 30), "POC Color", group=groupVRVP, display=display.none)
-vrvpPocLineWidth = input.int(2, "POC Line Width", minval=0, maxval=5, group=groupVRVP, display=display.none)
+vrvpPlacement = input.string("Left", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
+vrvpBarBorder = input.int(0, "Bar Border Width", minval=0, maxval=3, group=groupVRVP, display=display.none)
+vrvpUpVolumeVA = input.color(color.new(color.rgb(8, 153, 129), 10), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
+vrvpDownVolumeVA = input.color(color.new(color.rgb(242, 54, 69), 10), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
+vrvpUpVolumeOut = input.color(color.new(color.rgb(8, 153, 129), 60), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
+vrvpDownVolumeOut = input.color(color.new(color.rgb(242, 54, 69), 60), "Down Volume (Outside VA)", group=groupVRVP, display=display.none)
+vrvpShowPocLine = input.bool(true, "Show POC Line", group=groupVRVP, display=display.none)
+vrvpPocCol = input.color(color.new(color.rgb(255, 235, 59), 0), "POC Color", group=groupVRVP, display=display.none)
+vrvpPocLineWidth = input.int(2, "POC Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
 vrvpShowPocLabel = input.bool(true, "Show POC Label", group=groupVRVP, display=display.none)
+vrvpShowVahLine = input.bool(true, "Show VAH Line", group=groupVRVP, display=display.none)
+vrvpVahCol = input.color(color.new(color.rgb(33, 150, 243), 0), "VAH Color", group=groupVRVP, display=display.none)
+vrvpShowValLine = input.bool(true, "Show VAL Line", group=groupVRVP, display=display.none)
+vrvpValCol = input.color(color.new(color.rgb(156, 39, 176), 0), "VAL Color", group=groupVRVP, display=display.none)
+vrvpVahValLineWidth = input.int(1, "VAH/VAL Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
+vrvpShowVaFill = input.bool(false, "Show VA Fill", group=groupVRVP, display=display.none)
+vrvpVaFillCol = input.color(color.new(color.rgb(120, 123, 134), 85), "VA Fill Color", group=groupVRVP, display=display.none)
+vrvpShowSummary = input.bool(false, "Show Summary Box", group=groupVRVP, display=display.none)
+vrvpMtfEnabled = input.bool(false, "Multi-Timeframe POC", group=groupVRVP, display=display.none)
+vrvpMtfTimeframe = input.timeframe("D", "MTF Timeframe", group=groupVRVP, display=display.none)
 
 groupScen = "Scenarios"
 useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, display=display.none)
@@ -464,7 +476,9 @@ var line[] waveLines = array.new_line()
 var label[] waveLabels = array.new_label()
 var box[] vrvpBoxes = array.new_box()
 var line[] vrvpLines = array.new_line()
+var linefill[] vrvpFills = array.new_linefill()
 var label vrvpPocLabel = na
+var label vrvpSummaryLabel = na
 var label msgLabel = na
 var float[] levelsA = array.new_float()
 var float[] levelsB = array.new_float()
@@ -501,9 +515,13 @@ if barstate.islast
     f_clearBoxes(scenBoxes)
     f_clearBoxes(vrvpBoxes)
     f_clearLines(vrvpLines)
+    f_clearLinefills(vrvpFills)
 
     if not na(vrvpPocLabel)
         label.delete(vrvpPocLabel)
+
+    if not na(vrvpSummaryLabel)
+        label.delete(vrvpSummaryLabel)
 
     if array.size(fibLabels) > 0
         for k = array.size(fibLabels) - 1 to 0
@@ -710,6 +728,11 @@ if barstate.islast
                     vaBottomIdx := vaBottomIdx - 1
                     currentVaVol := currentVaVol + downVol
 
+            // Calculate key prices
+            float pocPrice = minPrice + (step * pocIdx) + (step / 2)
+            float vahPrice = minPrice + (step * vaTopIdx) + (step / 2)
+            float valPrice = minPrice + (step * vaBottomIdx) + (step / 2)
+
             // Draw histogram
             int timeRange = endTime - startTime
 
@@ -738,21 +761,55 @@ if barstate.islast
                             bgColor := isUpBar ? vrvpUpVolumeOut : vrvpDownVolumeOut
 
                     array.push(vrvpBoxes, box.new(boxLeft, boxTop, boxRight, boxBottom,
-                         xloc=xloc.bar_time, border_width=0, bgcolor=bgColor))
+                         xloc=xloc.bar_time, border_width=vrvpBarBorder, bgcolor=bgColor))
 
-                    // Draw POC line and label
-                    if isPoc
-                        float pocPrice = (boxTop + boxBottom) / 2
-                        if vrvpPocLineWidth > 0
-                            array.push(vrvpLines, line.new(startTime, pocPrice, endTime, pocPrice,
-                                 xloc=xloc.bar_time, color=vrvpPocCol, width=vrvpPocLineWidth))
+            // Draw POC line and label
+            if vrvpShowPocLine
+                array.push(vrvpLines, line.new(startTime, pocPrice, endTime, pocPrice,
+                     xloc=xloc.bar_time, color=vrvpPocCol, width=vrvpPocLineWidth))
 
-                        if vrvpShowPocLabel
-                            string priceText = "POC: " + str.tostring(pocPrice, format.mintick)
-                            vrvpPocLabel := label.new(x=(vrvpPlacement == "Right" ? startTime : endTime),
-                                 y=pocPrice, text=priceText, xloc=xloc.bar_time,
-                                 color=color.new(vrvpPocCol, 0), textcolor=color.black,
-                                 style=label.style_label_left, size=size.small)
+            if vrvpShowPocLabel
+                string priceText = "POC: " + str.tostring(pocPrice, format.mintick)
+                vrvpPocLabel := label.new(x=(vrvpPlacement == "Right" ? startTime : endTime),
+                     y=pocPrice, text=priceText, xloc=xloc.bar_time,
+                     color=color.new(vrvpPocCol, 0), textcolor=color.black,
+                     style=label.style_label_left, size=size.small)
+
+            // Draw VAH line
+            if vrvpShowVahLine and not na(vahPrice)
+                line vahLine = line.new(startTime, vahPrice, endTime, vahPrice,
+                     xloc=xloc.bar_time, color=vrvpVahCol, width=vrvpVahValLineWidth)
+                array.push(vrvpLines, vahLine)
+
+            // Draw VAL line
+            if vrvpShowValLine and not na(valPrice)
+                line valLine = line.new(startTime, valPrice, endTime, valPrice,
+                     xloc=xloc.bar_time, color=vrvpValCol, width=vrvpVahValLineWidth)
+                array.push(vrvpLines, valLine)
+
+            // Draw VA fill
+            if vrvpShowVaFill and not na(vahPrice) and not na(valPrice)
+                line vahFillLine = line.new(startTime, vahPrice, endTime, vahPrice,
+                     xloc=xloc.bar_time, color=color.new(color.white, 100), width=1)
+                line valFillLine = line.new(startTime, valPrice, endTime, valPrice,
+                     xloc=xloc.bar_time, color=color.new(color.white, 100), width=1)
+                array.push(vrvpLines, vahFillLine)
+                array.push(vrvpLines, valFillLine)
+                array.push(vrvpFills, linefill.new(vahFillLine, valFillLine, vrvpVaFillCol))
+
+            // Draw summary box
+            if vrvpShowSummary
+                string summaryText = "POC: " + str.tostring(pocPrice, format.mintick)
+                summaryText := summaryText + "\nVAH: " + str.tostring(vahPrice, format.mintick)
+                summaryText := summaryText + "\nVAL: " + str.tostring(valPrice, format.mintick)
+
+                int summaryX = vrvpPlacement == "Right" ? endTime : startTime
+                float summaryY = vahPrice + ((vahPrice - valPrice) * 0.2)
+
+                vrvpSummaryLabel := label.new(x=summaryX, y=summaryY, text=summaryText,
+                     xloc=xloc.bar_time, style=label.style_label_left,
+                     color=color.new(color.rgb(40, 92, 160), 20), textcolor=color.white,
+                     size=size.normal)
 
     // Draw message label
     string msg = "SCAN\n"
