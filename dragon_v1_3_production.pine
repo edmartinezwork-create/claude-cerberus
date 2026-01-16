@@ -648,10 +648,11 @@ if barstate.islast
 
             int foundIdx = -1
             int nBins = array.size(vrvpBinPrice)
-            for j = 0 to nBins - 1
-                if array.get(vrvpBinPrice, j) == pBin
-                    foundIdx := j
-                    break
+            if nBins > 0
+                for j = 0 to nBins - 1
+                    if array.get(vrvpBinPrice, j) == pBin
+                        foundIdx := j
+                        break
 
             if foundIdx == -1
                 array.push(vrvpBinPrice, pBin)
