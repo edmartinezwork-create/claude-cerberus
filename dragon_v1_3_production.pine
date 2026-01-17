@@ -101,8 +101,8 @@ labelBgCol = input.color(color.new(color.rgb(40, 92, 160), 30), "Message Backgro
 
 showVwapPlot = input.bool(false, "Show VWAP on price scale", display=display.none)
 showVwapOnChart = input.bool(true, "Show VWAP on chart", group=groupCore, display=display.none)
-vwapWidth = input.int(2, "VWAP Width", minval=1, maxval=5, group=groupCore, display=display.none)
-vwapCol = input.color(color.rgb(240, 203, 38), "VWAP Color", group=groupCore, display=display.none)
+vwapWidth = input.int(1, "VWAP Width", minval=1, maxval=5, group=groupCore, display=display.none)
+vwapCol = input.color(color.rgb(233, 30, 99), "VWAP Color", group=groupCore, display=display.none)
 
 // ============================================================================
 // HELPER FUNCTIONS
