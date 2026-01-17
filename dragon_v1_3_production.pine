@@ -1157,25 +1157,31 @@ if barstate.islast
         msg := "⚪ NEUTRAL\nAt VWAP\n\nWait for confirmation"
 
     if showMessage
-        // Position message above current price action using bar index reference
-        // This provides more stable positioning than using recent high/low
-        float currentRange = high - low
+        // Position message using recent high/low for more accurate placement
+        // Find the highest/lowest points in the visible range where label will appear
+        float maxHigh = high
+        float minLow = low
+        for i = 0 to math.min(100, bar_index)
+            maxHigh := math.max(maxHigh, high[i])
+            minLow := math.min(minLow, low[i])
+
+        float priceRange = maxHigh - minLow
         int msgX = bar_index + msgXOffset - 50
 
-        // Check both positions (above and below) for overlap
-        float labelAbove = high + (currentRange * 0.15)
-        float labelBelow = low - (currentRange * 0.15)
+        // Check both positions (above and below) with larger offsets
+        float labelAbove = maxHigh + (priceRange * 0.10)  // 10% above highest point
+        float labelBelow = minLow - (priceRange * 0.10)   // 10% below lowest point
 
         // Check if placing above would overlap with nearby candles
         bool overlapAbove = false
-        for i = 0 to math.min(50, bar_index)
+        for i = 0 to math.min(100, bar_index)
             if high[i] >= labelAbove
                 overlapAbove := true
                 break
 
         // Check if placing below would overlap with nearby candles
         bool overlapBelow = false
-        for i = 0 to math.min(50, bar_index)
+        for i = 0 to math.min(100, bar_index)
             if low[i] <= labelBelow
                 overlapBelow := true
                 break
@@ -1193,8 +1199,8 @@ if barstate.islast
             msgY := labelBelow
             labelStyle := label.style_label_upper_right
         else
-            // Both have overlap, default to above
-            msgY := labelAbove
+            // Both have overlap, place further above
+            msgY := maxHigh + (priceRange * 0.20)
             labelStyle := label.style_label_lower_right
 
         msgLabel := label.new(msgX, msgY, msg,
