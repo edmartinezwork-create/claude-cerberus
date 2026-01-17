@@ -108,12 +108,10 @@ htfLowTime = request.security(syminfo.tickerid, "240",
 
 groupMsg = "Message"
 showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
+msgPosition = input.string("Bottom Left", "Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=groupMsg, display=display.none)
 labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
 labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
 labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
-labelStyleOpt = input.string("Left", "Message Label Style", options=["Left","Up","Down"], group=groupMsg, display=display.none)
-msgXOffset = input.int(60, "Message X offset (bars)", minval=10, maxval=300, group=groupMsg, display=display.none)
-msgYOffsetTicks = input.int(-600, "Message Y offset (ticks)", minval=-5000, maxval=5000, group=groupMsg, display=display.none)
 
 showVwapPlot = input.bool(false, "Show VWAP on price scale", display=display.none)
 showVwapOnChart = input.bool(true, "Show VWAP on chart", group=groupCore, display=display.none)
@@ -229,6 +227,20 @@ f_triangleWeight(_price, _center, _halfWidth) =>
     else
         float distance = math.abs(_price - _center)
         math.max(0.0, 1.0 - (distance / _halfWidth))
+
+// Convert position string to Pine Script position constant
+f_tablePosition(_posStr) =>
+    switch _posStr
+        "Top Left" => position.top_left
+        "Top Center" => position.top_center
+        "Top Right" => position.top_right
+        "Middle Left" => position.middle_left
+        "Middle Center" => position.middle_center
+        "Middle Right" => position.middle_right
+        "Bottom Left" => position.bottom_left
+        "Bottom Center" => position.bottom_center
+        "Bottom Right" => position.bottom_right
+        => position.bottom_left
 
 // Draw fibonacci line with label - line starts after label text
 f_fibLineWithLabel(_lines, _labels, _y, _leftX, _rightX, _col, _style, _w, _labelText, _labelSize) =>
@@ -573,7 +585,7 @@ var line[] vrvpLines = array.new_line()
 var linefill[] vrvpFills = array.new_linefill()
 var label vrvpPocLabel = na
 var label vrvpSummaryLabel = na
-var label msgLabel = na
+var table msgTable = na
 var label pathDebugLabel = na
 
 lineStyleMacro = f_lineStyle(fibMacroStyle)
@@ -582,15 +594,11 @@ lineStyleScenTrig = f_lineStyle(scenTrigStyle)
 lineStyleScenA = f_lineStyle(scenAStyle)
 lineStyleScenB = f_lineStyle(scenBStyle)
 lineStyleWave = f_lineStyle(standardStyle)
-lblStyle = f_labelStyle(labelStyleOpt)
 lblSize = f_size(labelSizeOpt)
 pathLblSize = f_size(pathLabelSizeOpt)
 pathDebugSize = f_size(pathDebugSizeOpt)
 
 if barstate.islast
-    int msgX = bar_index + msgXOffset
-    float msgY = close + syminfo.mintick * msgYOffsetTicks
-
     // Clear all previous drawings
     f_clearLines(fibLines)
     f_clearLines(scenLines)
@@ -627,8 +635,6 @@ if barstate.islast
             box.delete(array.get(pathBoxes, k))
         array.clear(pathBoxes)
 
-    if not na(msgLabel)
-        label.delete(msgLabel)
     if not na(pathDebugLabel)
         label.delete(pathDebugLabel)
 
@@ -1293,7 +1299,8 @@ if barstate.islast
             msg := "CHOP/UNDECIDED\nNear VWAP and trigger\nWait for confirmation"
 
     if showMessage
-        msgLabel := label.new(msgX, msgY, msg, style=lblStyle, textalign=text.align_left, size=lblSize, textcolor=labelTextCol, color=labelBgCol, xloc=xloc.bar_index, yloc=yloc.price)
+        msgTable := table.new(f_tablePosition(msgPosition), 1, 1, bgcolor=color.new(color.black, 100), border_width=0)
+        table.cell(msgTable, 0, 0, msg, text_color=labelTextCol, bgcolor=labelBgCol, text_size=lblSize, text_halign=text.align_left)
 
 // ============================================================================
 // ALERTS
