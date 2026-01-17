@@ -20,26 +20,26 @@ showMacroRetrace = input.bool(true, "Show Macro Retracements", group=groupFibs, 
 showMacroExt = input.bool(true, "Show Macro Extensions", group=groupFibs, display=display.none)
 showMicroRetrace = input.bool(true, "Show Micro Retracements", group=groupFibs, display=display.none)
 showMicroExt = input.bool(true, "Show Micro Extensions", group=groupFibs, display=display.none)
-fibMacroCol = input.color(color.rgb(230, 151, 67), "Macro Fib Color", group=groupFibs, display=display.none)
+fibMacroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Macro Fib Color", group=groupFibs, display=display.none)
 fibMacroWidth = input.int(1, "Macro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
 fibMacroStyle = input.string("Dotted", "Macro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
-fibMicroCol = input.color(color.rgb(64, 180, 170), "Micro Fib Color", group=groupFibs, display=display.none)
+fibMicroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Micro Fib Color", group=groupFibs, display=display.none)
 fibMicroWidth = input.int(1, "Micro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
 fibMicroStyle = input.string("Dashed", "Micro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
 
 groupVRVP = "Visible Range Volume Profile"
-showVRVP = input.bool(false, "Show VRVP", group=groupVRVP, display=display.none)
+showVRVP = input.bool(true, "Show VRVP", group=groupVRVP, display=display.none)
 vrvpRows = input.int(100, "Rows (Resolution)", minval=10, maxval=500, group=groupVRVP, display=display.none)
 vrvpWidth = input.int(40, "Profile Width (%)", minval=1, maxval=100, group=groupVRVP, display=display.none)
 vrvpValueArea = input.int(70, "Value Area (%)", minval=0, maxval=100, group=groupVRVP, display=display.none)
 vrvpPlacement = input.string("Left", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
-vrvpBarBorder = input.int(0, "Bar Border Width", minval=0, maxval=3, group=groupVRVP, display=display.none)
-vrvpBarBorderColor = input.color(color.new(color.black, 0), "Bar Border Color", group=groupVRVP, display=display.none)
+vrvpBarBorder = input.int(1, "Bar Border Width", minval=0, maxval=3, group=groupVRVP, display=display.none)
+vrvpBarBorderColor = input.color(color.new(color.white, 0), "Bar Border Color", group=groupVRVP, display=display.none)
 vrvpDistribution = input.string("Typical Price Weighted", "Volume Distribution", options=["Uniform", "Typical Price Weighted", "Close Weighted"], group=groupVRVP, display=display.none)
-vrvpUpVolumeVA = input.color(color.new(color.rgb(8, 153, 129), 10), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
-vrvpDownVolumeVA = input.color(color.new(color.rgb(242, 54, 69), 10), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
-vrvpUpVolumeOut = input.color(color.new(color.rgb(8, 153, 129), 60), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
-vrvpDownVolumeOut = input.color(color.new(color.rgb(242, 54, 69), 60), "Down Volume (Outside VA)", group=groupVRVP, display=display.none)
+vrvpUpVolumeVA = input.color(color.new(color.rgb(0, 100, 80), 10), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
+vrvpDownVolumeVA = input.color(color.new(color.rgb(180, 40, 50), 10), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
+vrvpUpVolumeOut = input.color(color.new(color.rgb(0, 100, 80), 60), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
+vrvpDownVolumeOut = input.color(color.new(color.rgb(180, 40, 50), 60), "Down Volume (Outside VA)", group=groupVRVP, display=display.none)
 vrvpShowPocLine = input.bool(true, "Show POC Line", group=groupVRVP, display=display.none)
 vrvpPocCol = input.color(color.new(color.rgb(255, 235, 59), 0), "POC Color", group=groupVRVP, display=display.none)
 vrvpPocLineWidth = input.int(2, "POC Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
@@ -71,7 +71,7 @@ mtfVolume = request.security(syminfo.tickerid, vrvpMtfTimeframe, volume, barmerg
 // SCENARIOS
 // ============================================================================
 groupScen = "Scenarios"
-showScenarioLines = input.bool(true, "Show Scenario Trigger/Targets", group=groupScen, inline="scenRow1", display=display.none)
+showScenarioLines = input.bool(false, "Show Scenario Trigger/Targets", group=groupScen, inline="scenRow1", display=display.none)
 useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, inline="scenRow1", display=display.none)
 scenTrigCol = input.color(color.rgb(212, 175, 55), "Trigger Color", group=groupScen, inline="scenRow2", display=display.none)
 scenTrigWidth = input.int(2, "Trigger Line Width", minval=0, maxval=5, group=groupScen, inline="scenRow2", display=display.none)
@@ -109,14 +109,14 @@ htfLowTime = request.security(syminfo.tickerid, "240",
 groupMsg = "Message"
 showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
 msgXOffset = input.int(5, "X Offset (bars from right)", minval=1, maxval=50, group=groupMsg, display=display.none)
-labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
+labelSizeOpt = input.string("Normal", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
 labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
-labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
+labelBgCol = input.color(color.new(color.rgb(40, 92, 160), 30), "Message Background Color", group=groupMsg, display=display.none)
 
 showVwapPlot = input.bool(false, "Show VWAP on price scale", display=display.none)
 showVwapOnChart = input.bool(true, "Show VWAP on chart", group=groupCore, display=display.none)
 vwapWidth = input.int(2, "VWAP Width", minval=1, maxval=5, group=groupCore, display=display.none)
-vwapCol = input.color(color.rgb(60, 120, 200), "VWAP Color", group=groupCore, display=display.none)
+vwapCol = input.color(color.rgb(240, 203, 38), "VWAP Color", group=groupCore, display=display.none)
 
 groupWaves = "Elliott"
 showWaves = input.bool(false, "Show Elliott Wave Scaffold", group=groupWaves, inline="waveRow1", display=display.none)
@@ -1292,13 +1292,14 @@ if barstate.islast
 
     if showMessage
         // Position message above recent price action
+        float adjustedHigh = recentHigh + 5
         float priceRange = recentHigh - recentLow
-        float msgY = recentHigh + (priceRange * 0.05)  // 5% above recent high
-        int msgX = bar_index + msgXOffset
+        float msgY = adjustedHigh + (priceRange * 0.05)  // 5% above recent high
+        int msgX = bar_index + msgXOffset - 50
 
         msgLabel := label.new(msgX, msgY, msg,
              xloc=xloc.bar_index, yloc=yloc.price,
-             style=label.style_label_down,
+             style=label.style_label_lower_right,
              textcolor=labelTextCol, color=labelBgCol,
              size=lblSize, textalign=text.align_left)
 
