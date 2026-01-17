@@ -4,14 +4,13 @@
 //
 // PRODUCTION VERSION - All syntax errors fixed and code review passed
 //@version=6
-indicator("Dragon v1.3: VWAP + Pivots + Dual Fibs + Nodes + Paths (2 Scenarios)", overlay=true, max_lines_count=500, max_labels_count=250)
+indicator("Dragon v1.3: VWAP + Pivots + Dual Fibs + Nodes + Paths (2 Scenarios)", overlay=true, max_bars_back=5000, max_lines_count=500, max_labels_count=250, max_boxes_count=1000)
 
 // ============================================================================
 // INPUTS
 // ============================================================================
 groupCore = "Core"
 src = input.source(hlc3, "VWAP Source", group=groupCore, display=display.none)
-pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupCore, display=display.none)
 vpLookback = input.int(200, "Volume Nodes Lookback (bars)", minval=50, maxval=600, group=groupCore, display=display.none)
 showPivots = input.bool(true, "Show Pivot Markers", group=groupCore, display=display.none)
 
@@ -28,15 +27,6 @@ fibMicroCol = input.color(color.rgb(64, 180, 170), "Micro Fib Color", group=grou
 fibMicroWidth = input.int(1, "Micro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
 fibMicroStyle = input.string("Dashed", "Micro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
 
-groupNodes = "Nodes"
-showNodes = input.bool(true, "Show POC/HVN/LVN", group=groupNodes, display=display.none)
-nodePocCol = input.color(color.rgb(33, 150, 243), "POC Color", group=groupNodes, display=display.none)
-nodeHvnCol = input.color(color.rgb(100, 181, 246), "HVN (VAH) Color", group=groupNodes, display=display.none)
-nodeLvnCol = input.color(color.rgb(66, 165, 245), "LVN (VAL) Color", group=groupNodes, display=display.none)
-nodeFillCol = input.color(color.new(color.rgb(33, 150, 243), 90), "HVN/LVN Fill Color", group=groupNodes, display=display.none)
-nodeWidth = input.int(2, "Node Width", minval=0, maxval=5, group=groupNodes, display=display.none)
-nodeStyle = input.string("Solid", "Node Style", options=["Solid","Dotted","Dashed"], group=groupNodes, display=display.none)
-
 groupVRVP = "Visible Range Volume Profile"
 showVRVP = input.bool(false, "Show VRVP", group=groupVRVP, display=display.none)
 vrvpRows = input.int(100, "Rows (Resolution)", minval=10, maxval=500, group=groupVRVP, display=display.none)
@@ -44,6 +34,8 @@ vrvpWidth = input.int(40, "Profile Width (%)", minval=1, maxval=100, group=group
 vrvpValueArea = input.int(70, "Value Area (%)", minval=0, maxval=100, group=groupVRVP, display=display.none)
 vrvpPlacement = input.string("Left", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
 vrvpBarBorder = input.int(0, "Bar Border Width", minval=0, maxval=3, group=groupVRVP, display=display.none)
+vrvpBarBorderColor = input.color(color.new(color.black, 0), "Bar Border Color", group=groupVRVP, display=display.none)
+vrvpDistribution = input.string("Typical Price Weighted", "Volume Distribution", options=["Uniform", "Typical Price Weighted", "Close Weighted"], group=groupVRVP, display=display.none)
 vrvpUpVolumeVA = input.color(color.new(color.rgb(8, 153, 129), 10), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
 vrvpDownVolumeVA = input.color(color.new(color.rgb(242, 54, 69), 10), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
 vrvpUpVolumeOut = input.color(color.new(color.rgb(8, 153, 129), 60), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
@@ -62,30 +54,60 @@ vrvpVaFillCol = input.color(color.new(color.rgb(120, 123, 134), 85), "VA Fill Co
 vrvpShowSummary = input.bool(false, "Show Summary Box", group=groupVRVP, display=display.none)
 vrvpMtfEnabled = input.bool(false, "Multi-Timeframe POC", group=groupVRVP, display=display.none)
 vrvpMtfTimeframe = input.timeframe("D", "MTF Timeframe", group=groupVRVP, display=display.none)
+vrvpShowDebug = input.bool(false, "Show VRVP Debug", group=groupVRVP, display=display.none)
+vrvpDebugTouchRows = input.bool(false, "Debug Touch Rows", group=groupVRVP, display=display.none)
 
+// Internal resolution (fixed)
+int vrvpInternalRows = 400
+
+// MTF series for VRVP POC
+mtfHigh = request.security(syminfo.tickerid, vrvpMtfTimeframe, high, barmerge.gaps_off, barmerge.lookahead_off)
+mtfLow = request.security(syminfo.tickerid, vrvpMtfTimeframe, low, barmerge.gaps_off, barmerge.lookahead_off)
+mtfOpen = request.security(syminfo.tickerid, vrvpMtfTimeframe, open, barmerge.gaps_off, barmerge.lookahead_off)
+mtfClose = request.security(syminfo.tickerid, vrvpMtfTimeframe, close, barmerge.gaps_off, barmerge.lookahead_off)
+mtfVolume = request.security(syminfo.tickerid, vrvpMtfTimeframe, volume, barmerge.gaps_off, barmerge.lookahead_off)
+
+// ============================================================================
+// SCENARIOS
+// ============================================================================
 groupScen = "Scenarios"
-useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, display=display.none)
-showScenarioLines = input.bool(true, "Show Scenario Trigger/Targets", group=groupScen, display=display.none)
-scenTrigCol = input.color(color.rgb(212, 175, 55), "Trigger Color", group=groupScen, display=display.none)
-scenTrigWidth = input.int(2, "Trigger Line Width", minval=0, maxval=5, group=groupScen, display=display.none)
+showScenarioLines = input.bool(true, "Show Scenario Trigger/Targets", group=groupScen, inline="scenRow1", display=display.none)
+useMicro618AsTrigger = input.bool(true, "Scenario Trigger Uses Micro 0.618", group=groupScen, inline="scenRow1", display=display.none)
+scenTrigCol = input.color(color.rgb(212, 175, 55), "Trigger Color", group=groupScen, inline="scenRow2", display=display.none)
+scenTrigWidth = input.int(2, "Trigger Line Width", minval=0, maxval=5, group=groupScen, inline="scenRow2", display=display.none)
 scenTrigStyle = input.string("Solid", "Trigger Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
-scenACol = input.color(color.rgb(61, 170, 106), "Scenario A Target Color", group=groupScen, display=display.none)
-scenAWidth = input.int(2, "Scenario A Line Width", minval=0, maxval=5, group=groupScen, display=display.none)
+scenACol = input.color(color.rgb(61, 170, 106), "Scenario A Target Color", group=groupScen, inline="scenRow3", display=display.none)
+scenAWidth = input.int(2, "Scenario A Line Width", minval=0, maxval=5, group=groupScen, inline="scenRow3", display=display.none)
 scenAStyle = input.string("Solid", "Scenario A Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
-scenBCol = input.color(color.rgb(205, 78, 76), "Scenario B Target Color", group=groupScen, display=display.none)
-scenBWidth = input.int(2, "Scenario B Line Width", minval=0, maxval=5, group=groupScen, display=display.none)
+scenBCol = input.color(color.rgb(205, 78, 76), "Scenario B Target Color", group=groupScen, inline="scenRow4", display=display.none)
+scenBWidth = input.int(2, "Scenario B Line Width", minval=0, maxval=5, group=groupScen, inline="scenRow4", display=display.none)
 scenBStyle = input.string("Solid", "Scenario B Line Style", options=["Solid","Dotted","Dashed"], group=groupScen, display=display.none)
 
 groupPath = "Paths"
-showPaths = input.bool(true, "Show Predictive Paths", group=groupPath, display=display.none)
-pathBars = input.int(18, "Path Forward Bars", minval=6, maxval=200, group=groupPath, display=display.none)
-pathStep = input.int(6, "Path Segment Step (bars)", minval=2, maxval=50, group=groupPath, display=display.none)
-pathACol = input.color(color.rgb(61, 170, 106), "Path A Color", group=groupPath, display=display.none)
-pathBCol = input.color(color.rgb(205, 78, 76), "Path B Color", group=groupPath, display=display.none)
-pathWidth = input.int(2, "Path Width", minval=1, maxval=5, group=groupPath, display=display.none)
-pathStyle = input.string("Solid", "Path Style", options=["Solid","Dotted","Dashed"], group=groupPath, display=display.none)
+showPaths = input.bool(true, "Show Predictive Paths", group=groupPath, inline="pathRow1", display=display.none)
+pathOpacity = input.int(70, "Path Opacity", minval=0, maxval=100, group=groupPath, inline="pathRow1", display=display.none)
+showPathLabels = input.bool(true, "Show Labels", group=groupPath, inline="pathRow1b", display=display.none)
+pathLabelSizeOpt = input.string("Small", "Label Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathRow1b", display=display.none)
+wave3RatioOpt = input.string("1.618", "Wave 3 Ratio", options=["1.618", "2.618"], group=groupPath, inline="pathRow2", display=display.none)
+wave4RetraceOpt = input.string("0.382", "Wave 4 Retrace", options=["0.382", "0.5"], group=groupPath, inline="pathRow2", display=display.none)
+pathACol = input.color(color.rgb(61, 170, 106), "Bull Color", group=groupPath, inline="pathRow3", display=display.none)
+pathBCol = input.color(color.rgb(205, 78, 76), "Bear Color", group=groupPath, inline="pathRow3", display=display.none)
+pathInvalidCol = input.color(color.gray, "Invalid Color", group=groupPath, inline="pathRow3", display=display.none)
+pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupPath, inline="pathRow4", display=display.none)
+strictMode = input.bool(true, "Strict Mode", group=groupPath, inline="pathRow4", display=display.none)
+showPathDebug = input.bool(false, "Show Path Debug", group=groupPath, inline="pathRow4b", display=display.none)
+pathDebugSizeOpt = input.string("Small", "Debug Label Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathRow4b", display=display.none)
+
+// HTF series for wave alignment (fixed 4h)
+htfHighTime = request.security(syminfo.tickerid, "240",
+     ta.valuewhen(not na(ta.pivothigh(high, pivotLen, pivotLen)), time, 0),
+     barmerge.gaps_off, barmerge.lookahead_off)
+htfLowTime = request.security(syminfo.tickerid, "240",
+     ta.valuewhen(not na(ta.pivotlow(low, pivotLen, pivotLen)), time, 0),
+     barmerge.gaps_off, barmerge.lookahead_off)
 
 groupMsg = "Message"
+showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
 labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
 labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
 labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
@@ -99,10 +121,51 @@ vwapWidth = input.int(2, "VWAP Width", minval=1, maxval=5, group=groupCore, disp
 vwapCol = input.color(color.rgb(60, 120, 200), "VWAP Color", group=groupCore, display=display.none)
 
 groupWaves = "Elliott"
-showWaves = input.bool(true, "Show Elliott Wave Scaffold", group=groupWaves, display=display.none)
-waveCol = input.color(color.rgb(233, 30, 99), "Wave Color", group=groupWaves, display=display.none)
-waveWidth = input.int(1, "Wave Width", minval=1, maxval=5, group=groupWaves, display=display.none)
-waveStyle = input.string("Solid", "Wave Style", options=["Solid","Dotted","Dashed"], group=groupWaves, display=display.none)
+showWaves = input.bool(true, "Show Elliott Wave Scaffold", group=groupWaves, inline="waveRow1", display=display.none)
+showWaveZero = input.bool(true, "Include Wave 0 Label", group=groupWaves, inline="waveRow1", display=display.none)
+structureType = input.string("Impulse", "Structure Type", options=["Impulse", "Correction"], group=groupWaves, display=display.none)
+impulsePattern = input.string(
+    "Classic impulse (5-3-5) - sequential",
+    "Impulse Pattern",
+    options=[
+        "Classic impulse (5-3-5) - sequential",
+        "Classic impulse (5-3-5) - template",
+        "Impulse with extended 1st wave",
+        "Impulse with extended 3rd wave",
+        "Impulse with extended 5th wave"
+    ],
+    group=groupWaves,
+    display=display.none
+)
+correctionPattern = input.string(
+    "Zigzag (5-3-5)",
+    "Correction Pattern",
+    options=[
+        "Zigzag (5-3-5)",
+        "Flat (3-3-5)",
+        "Expanded bullish flat",
+        "Expanded bearish flat",
+        "Running flat"
+    ],
+    group=groupWaves,
+    display=display.none
+)
+buildPointZeroTime = input.time(timestamp("2025-12-22 08:30 +0000"), "0 Time", group=groupWaves, inline="build0", display=display.none)
+buildPointZeroPrice = input.float(0.0, "0 Price", group=groupWaves, inline="build0", display=display.none)
+buildPointATime = input.time(timestamp("2026-01-08 08:30 +0000"), "A Time", group=groupWaves, inline="buildA", display=display.none)
+buildPointAPrice = input.float(0.0, "A Price", group=groupWaves, inline="buildA", display=display.none)
+showStandardPattern = input.bool(true, "Show standard pattern", group=groupWaves, inline="waveRow2", display=display.none)
+showMinimalRatios = input.bool(true, "Show minimal ratios", group=groupWaves, inline="waveRow2", display=display.none)
+showMaximalRatios = input.bool(true, "Show maximal ratios", group=groupWaves, inline="waveRow3", display=display.none)
+standardRatios = input.string("Classic", "Standard ratios", options=["Classic"], group=groupWaves, inline="waveRow3", display=display.none)
+standardStyle = input.string("Solid", "Standard style", options=["Solid","Dotted","Dashed"], group=groupWaves, inline="waveRow4", display=display.none)
+minimalStyle = input.string("Dotted", "Minimal style", options=["Solid","Dotted","Dashed"], group=groupWaves, inline="waveRow4", display=display.none)
+maximalStyle = input.string("Dotted", "Maximal style", options=["Solid","Dotted","Dashed"], group=groupWaves, inline="waveRow5", display=display.none)
+waveWidth = input.int(1, "Wave Width", minval=1, maxval=5, group=groupWaves, inline="waveRow5", display=display.none)
+standardColor = input.color(color.rgb(45, 105, 255), "Standard color", group=groupWaves, inline="waveRow6", display=display.none)
+minimalColor = input.color(color.rgb(80, 180, 110), "Minimal color", group=groupWaves, inline="waveRow6", display=display.none)
+maximalColor = input.color(color.rgb(230, 90, 80), "Maximal color", group=groupWaves, inline="waveRow7", display=display.none)
+waveLabelTextCol = input.color(color.white, "Wave Label Text Color", group=groupWaves, inline="waveRow7", display=display.none)
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -160,9 +223,12 @@ f_seg(_arr, _x1, _y1, _x2, _y2, _col, _style, _w) =>
         line ln = line.new(_x1, _y1, _x2, _y2, xloc=xloc.bar_index, extend=extend.none, color=_col, style=_style, width=_w)
         array.push(_arr, ln)
 
-f_pushLevel(_arr, _val) =>
-    if not na(_val)
-        array.push(_arr, _val)
+f_triangleWeight(_price, _center, _halfWidth) =>
+    if _halfWidth <= 0
+        1.0
+    else
+        float distance = math.abs(_price - _center)
+        math.max(0.0, 1.0 - (distance / _halfWidth))
 
 // Draw fibonacci line with label - line starts after label text
 f_fibLineWithLabel(_lines, _labels, _y, _leftX, _rightX, _col, _style, _w, _labelText, _labelSize) =>
@@ -186,11 +252,14 @@ f_fibLineWithLabel(_lines, _labels, _y, _leftX, _rightX, _col, _style, _w, _labe
 var int[] waveBars = array.new_int()
 var float[] wavePrices = array.new_float()
 var int[] waveDirs = array.new_int()
+var int lastBaseIdx = na
+var int lastW3ConfirmBar = na
 
-// Elliott Wave update function - tracks pivot extremes
+// Elliott Wave update function - tracks pivot extremes with invalidation logic
 f_updateWave(_bars, _prices, _dirs, _bar, _price, _dir, _max) =>
     int n = array.size(_bars)
     int result = 0
+
     if n == 0
         // First wave point
         array.push(_bars, _bar)
@@ -221,25 +290,42 @@ f_updateWave(_bars, _prices, _dirs, _bar, _price, _dir, _max) =>
             result := 0
     result
 
-// Zigzag path builder for predictive paths
-// _dirBias: +1 for bullish (A), -1 for bearish (B)
-f_buildPath(_outLines, _x0, _y0, _levels, _col, _style, _w, _dirBias, _segCount) =>
-    int lvN = array.size(_levels)
-    if lvN > 0 and _segCount > 0
-        float prevLevel = _y0
-        float prevZ = _y0
-        for i = 0 to _segCount - 1
-            int xi1 = _x0 + (i + 1) * pathStep
-            float lvl = array.get(_levels, i % lvN)
-            float amp = math.abs(lvl - prevLevel) * 0.18
-            int alt = 1
-            if (i % 2) != 0
-                alt := -1
-            int sgn = alt * _dirBias
-            float zi = lvl + amp * sgn
-            f_seg(_outLines, _x0 + i * pathStep, prevZ, xi1, zi, _col, _style, _w)
-            prevLevel := lvl
-            prevZ := zi
+// Check for wave invalidation and remove stale pivots
+f_checkWaveInvalidation(_bars, _prices, _dirs) =>
+    int n = array.size(_bars)
+    bool invalidated = false
+
+    // Need at least 3 points to check invalidation (0, 1, 2)
+    if n >= 3
+        // Check the most recent 0-1-2 sequence
+        float w0 = array.get(_prices, n - 3)
+        float w1 = array.get(_prices, n - 2)
+        float w2 = array.get(_prices, n - 1)
+        int dir0 = array.get(_dirs, n - 3)
+        int dir1 = array.get(_dirs, n - 2)
+        int dir2 = array.get(_dirs, n - 1)
+
+        // Determine if this is a bullish or bearish sequence
+        bool isBullish = w1 > w0
+        bool isBearish = w1 < w0
+
+        // Bullish sequence: W0 (low), W1 (high), W2 (low pullback)
+        // Invalidated if W2 breaks below W0
+        if isBullish and w2 <= w0
+            invalidated := true
+
+        // Bearish sequence: W0 (high), W1 (low), W2 (high pullback)
+        // Invalidated if W2 breaks above W0
+        if isBearish and w2 >= w0
+            invalidated := true
+
+        // If invalidated, remove the oldest pivot (W0) to reset the count
+        if invalidated
+            array.shift(_bars)
+            array.shift(_prices)
+            array.shift(_dirs)
+
+    invalidated
 
 // ============================================================================
 // SESSION VWAP
@@ -262,12 +348,19 @@ var int lastPivotLowBar = na
 if not na(ph)
     lastPivotHigh := ph
     lastPivotHighBar := bar_index - pivotLen
-    f_updateWave(waveBars, wavePrices, waveDirs, bar_index - pivotLen, ph, 1, 5)
+    f_updateWave(waveBars, wavePrices, waveDirs, bar_index - pivotLen, ph, 1, 6)
 
 if not na(pl)
     lastPivotLow := pl
     lastPivotLowBar := bar_index - pivotLen
-    f_updateWave(waveBars, wavePrices, waveDirs, bar_index - pivotLen, pl, -1, 5)
+    f_updateWave(waveBars, wavePrices, waveDirs, bar_index - pivotLen, pl, -1, 6)
+
+// Check for wave invalidation on every bar
+if barstate.isconfirmed
+    bool wasInvalidated = f_checkWaveInvalidation(waveBars, wavePrices, waveDirs)
+    if wasInvalidated
+        // Reset wave 3 confirmation when wave count resets
+        lastW3ConfirmBar := na
 
 if showPivots and not na(ph)
     label.new(bar_index - pivotLen, ph, "PH", style=label.style_label_down, textcolor=color.white, color=color.rgb(60, 120, 200), size=size.tiny)
@@ -324,7 +417,7 @@ microExt1272 = na(microA) ? na : f_fibLevel(microA, microB, 1.272)
 microExt1618 = na(microA) ? na : f_fibLevel(microA, microB, 1.618)
 
 // ============================================================================
-// VOLUME PROFILE NODES (POC/HVN/LVN)
+// VOLUME PROFILE NODES (POC/HVN/LVN) - values used for targets; drawing handled by VRVP
 // ============================================================================
 tick = syminfo.mintick
 lb = math.min(vpLookback, bar_index + 1)
@@ -461,44 +554,38 @@ if barstate.isconfirmed or barstate.isrealtime
             if scenB_now and not scenA_now
                 activeScen := -1
 
+
 // ============================================================================
 // DRAWING MANAGEMENT
 // ============================================================================
 var line[] fibLines = array.new_line()
 var label[] fibLabels = array.new_label()
-var line[] nodeLines = array.new_line()
-var linefill[] nodeFills = array.new_linefill()
 var line[] scenLines = array.new_line()
 var box[] scenBoxes = array.new_box()
 var line[] pathLinesA = array.new_line()
-var line[] pathLinesB = array.new_line()
+var label[] pathLabelsA = array.new_label()
+var box[] pathBoxes = array.new_box()
 var line[] waveLines = array.new_line()
 var label[] waveLabels = array.new_label()
 var box[] vrvpBoxes = array.new_box()
+var box[] vrvpDebugBoxes = array.new_box()
 var line[] vrvpLines = array.new_line()
 var linefill[] vrvpFills = array.new_linefill()
 var label vrvpPocLabel = na
 var label vrvpSummaryLabel = na
 var label msgLabel = na
-var float[] levelsA = array.new_float()
-var float[] levelsB = array.new_float()
+var label pathDebugLabel = na
 
 lineStyleMacro = f_lineStyle(fibMacroStyle)
 lineStyleMicro = f_lineStyle(fibMicroStyle)
-lineStyleNodes = f_lineStyle(nodeStyle)
 lineStyleScenTrig = f_lineStyle(scenTrigStyle)
 lineStyleScenA = f_lineStyle(scenAStyle)
 lineStyleScenB = f_lineStyle(scenBStyle)
-lineStylePath = f_lineStyle(pathStyle)
-lineStyleWave = f_lineStyle(waveStyle)
+lineStyleWave = f_lineStyle(standardStyle)
 lblStyle = f_labelStyle(labelStyleOpt)
 lblSize = f_size(labelSizeOpt)
-
-int segCount = math.floor(pathBars / pathStep)
-if segCount < 1
-    segCount := 1
-if segCount > 50
-    segCount := 50
+pathLblSize = f_size(pathLabelSizeOpt)
+pathDebugSize = f_size(pathDebugSizeOpt)
 
 if barstate.islast
     int msgX = bar_index + msgXOffset
@@ -506,14 +593,12 @@ if barstate.islast
 
     // Clear all previous drawings
     f_clearLines(fibLines)
-    f_clearLines(nodeLines)
-    f_clearLinefills(nodeFills)
     f_clearLines(scenLines)
     f_clearLines(pathLinesA)
-    f_clearLines(pathLinesB)
     f_clearLines(waveLines)
     f_clearBoxes(scenBoxes)
     f_clearBoxes(vrvpBoxes)
+    f_clearBoxes(vrvpDebugBoxes)
     f_clearLines(vrvpLines)
     f_clearLinefills(vrvpFills)
 
@@ -533,8 +618,19 @@ if barstate.islast
             label.delete(array.get(waveLabels, k))
         array.clear(waveLabels)
 
+    if array.size(pathLabelsA) > 0
+        for k = array.size(pathLabelsA) - 1 to 0
+            label.delete(array.get(pathLabelsA, k))
+        array.clear(pathLabelsA)
+    if array.size(pathBoxes) > 0
+        for k = array.size(pathBoxes) - 1 to 0
+            box.delete(array.get(pathBoxes, k))
+        array.clear(pathBoxes)
+
     if not na(msgLabel)
         label.delete(msgLabel)
+    if not na(pathDebugLabel)
+        label.delete(pathDebugLabel)
 
     int rightX = bar_index + 130
     int clampLeft = bar_index - 130
@@ -561,26 +657,6 @@ if barstate.islast
         if showMicroExt
             f_fibLineWithLabel(fibLines, fibLabels, microExt1272, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "1.272 | " + str.tostring(microExt1272, format.mintick), size.small)
             f_fibLineWithLabel(fibLines, fibLabels, microExt1618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "1.618 | " + str.tostring(microExt1618, format.mintick), size.small)
-
-    // Draw volume nodes with fill between HVN and LVN
-    if showNodes
-        // Draw POC line
-        f_hline(nodeLines, poc, clampLeft, rightX, nodePocCol, lineStyleNodes, nodeWidth, extend.right)
-
-        // Draw HVN and LVN lines and create fill between them
-        if not na(hvn) and not na(lvn)
-            line hvnLine = line.new(clampLeft, hvn, rightX, hvn, xloc=xloc.bar_index, extend=extend.right, color=nodeHvnCol, style=lineStyleNodes, width=nodeWidth)
-            array.push(nodeLines, hvnLine)
-
-            line lvnLine = line.new(clampLeft, lvn, rightX, lvn, xloc=xloc.bar_index, extend=extend.right, color=nodeLvnCol, style=lineStyleNodes, width=nodeWidth)
-            array.push(nodeLines, lvnLine)
-
-            // Create fill between HVN (VAH) and LVN (VAL)
-            linefill nodeFill = linefill.new(hvnLine, lvnLine, nodeFillCol)
-            array.push(nodeFills, nodeFill)
-        else
-            f_hline(nodeLines, hvn, clampLeft, rightX, nodeHvnCol, lineStyleNodes, nodeWidth, extend.right)
-            f_hline(nodeLines, lvn, clampLeft, rightX, nodeLvnCol, lineStyleNodes, nodeWidth, extend.right)
 
     // Draw scenario lines and boxes
     if showScenarioLines
@@ -609,35 +685,173 @@ if barstate.islast
             if canRed
                 array.push(scenBoxes, box.new(clampLeft, redTop, rightX, redBot, xloc=xloc.bar_index, bgcolor=color.new(pathBCol, 95), border_color=na, border_width=0))
 
-    // Draw predictive paths
+    // Draw predictive paths (local pivots only)
     if showPaths
-        array.clear(levelsA)
-        array.clear(levelsB)
+        int waveCount = array.size(waveBars)
+        int baseIdx = waveCount - math.min(waveCount, 6)
+        int avail = waveCount - baseIdx
+        if lastBaseIdx != baseIdx
+            lastW3ConfirmBar := na
+            lastBaseIdx := baseIdx
+        if avail >= 3
+            bool mtfUp = not na(htfHighTime) and not na(htfLowTime) and htfHighTime > htfLowTime
+            int baseIdxSel = na
+            if waveCount >= 3
+                int idx = waveCount - 3
+                while idx >= 0
+                    float c0 = array.get(wavePrices, idx)
+                    float c1 = array.get(wavePrices, idx + 1)
+                    float c2 = array.get(wavePrices, idx + 2)
+                    int dirSeq = c1 > c0 ? 1 : -1
+                    bool biasOk = mtfUp ? dirSeq == 1 : dirSeq == -1
+                    bool momentumOk = dirSeq == 1 ? close >= c2 : close <= c2
+                    int dir0 = array.get(waveDirs, idx)
+                    int dir1 = array.get(waveDirs, idx + 1)
+                    int dir2 = array.get(waveDirs, idx + 2)
+                    bool bullishStructure = dirSeq == 1 and dir0 == -1 and dir1 == 1 and dir2 == -1 and c1 > c0 and c2 > c0 and c2 < c1
+                    bool bearishStructure = dirSeq == -1 and dir0 == 1 and dir1 == -1 and dir2 == 1 and c1 < c0 and c2 < c0 and c2 > c1
+                    bool structureOk = dirSeq == 1 ? bullishStructure : bearishStructure
+                    if biasOk and momentumOk and structureOk
+                        baseIdxSel := idx
+                        break
+                    idx -= 1
+            int useBaseIdx = na(baseIdxSel) ? baseIdx : baseIdxSel
+            float w0 = array.get(wavePrices, useBaseIdx)
+            float w1 = array.get(wavePrices, useBaseIdx + 1)
+            float w2 = array.get(wavePrices, useBaseIdx + 2)
+            int b0 = array.get(waveBars, useBaseIdx)
+            int b1 = array.get(waveBars, useBaseIdx + 1)
+            int b2 = array.get(waveBars, useBaseIdx + 2)
+            int dirBase = w1 > w0 ? 1 : -1
+            int dirLive = dirBase
+            if dirBase == -1 and close > w2
+                dirLive := 1
+            if dirBase == 1 and close < w2
+                dirLive := -1
+            float wave1LenBase = math.abs(w1 - w0)
+            float wave1Len = dirLive == dirBase ? wave1LenBase : math.abs(w2 - w1)
+            int wave1DurBase = math.max(1, b1 - b0)
+            int wave2DurBase = math.max(1, b2 - b1)
+            int wave1Dur = dirLive == dirBase ? wave1DurBase : wave2DurBase
+            int wave2Dur = dirLive == dirBase ? wave2DurBase : wave1DurBase
+            int stepW3Base = math.max(1, int(math.round(wave1Dur * 1.618)))
+            int stepW4 = math.max(1, wave2Dur)
+            int stepW5 = math.max(1, wave1Dur)
+            float wave2Retrace = wave1Len > 0 ? math.abs(w1 - w2) / wave1Len : na
+            bool wave2Sharp = not na(wave2Retrace) and wave2Retrace >= 0.618 and wave2Dur <= wave1Dur
+            bool wave2Flat = not na(wave2Retrace) and (wave2Retrace < 0.5 or wave2Dur > wave1Dur)
+            bool w2Invalid = dirLive == dirBase ? (dirLive == 1 ? w2 <= w0 : w2 >= w0) : false
+            float w3Target1618 = w2 + dirLive * wave1Len * 1.618
+            float w3Target2618 = w2 + dirLive * wave1Len * 2.618
+            float w3Target = wave3RatioOpt == "2.618" ? w3Target2618 : w3Target1618
+            bool w3PivotFormed = dirLive == 1 ? (not na(ph) and (bar_index - pivotLen) > b2) : (not na(pl) and (bar_index - pivotLen) > b2)
+            bool w3Reached = dirLive == 1 ? high >= w3Target : low <= w3Target
+            bool w3Exceeded = dirLive == 1 ? high > w3Target : low < w3Target
+            bool w3Confirmed = w3PivotFormed and w3Reached
+            float w3Anchor = w3Exceeded ? (dirLive == 1 ? high : low) : w3Target
+            float w3Used = w3Confirmed ? w3Target1618 : w3Anchor
+            float wave3Len = math.abs(w3Anchor - w2)
+            float w4Ratio = wave4RetraceOpt == "0.5" ? 0.5 : 0.382
+            float w4Target = w3Confirmed ? (w3Anchor - dirLive * wave3Len * w4Ratio) : na
+            int stepW3 = w3Exceeded ? math.max(stepW3Base, int(math.round(stepW3Base * 1.618))) : stepW3Base
+            int x3 = bar_index + stepW3
+            int x4 = x3 + stepW4
+            int x5 = x4 + stepW5
+            if w3Confirmed and na(lastW3ConfirmBar)
+                lastW3ConfirmBar := bar_index
+            int w4DurationLive = na(lastW3ConfirmBar) ? 0 : (bar_index - lastW3ConfirmBar)
+            float w4RetraceLive = wave3Len > 0 ? math.abs(w3Target1618 - (dirLive == 1 ? low : high)) / wave3Len : 0.0
+            bool w4Choppy = w3Confirmed and w4RetraceLive < 0.382 and w4DurationLive > wave2Dur
+            bool w4FlatProjected = wave2Sharp ? true : wave2Flat ? false : false
+            if w4Choppy
+                w4FlatProjected := true
 
-        // Bullish path magnets
-        f_pushLevel(levelsA, trig)
-        f_pushLevel(levelsA, targetA)
-        f_pushLevel(levelsA, microExt1618)
-        f_pushLevel(levelsA, macroExt1618)
-        f_pushLevel(levelsA, hvn)
+            bool htfOpposite = not na(htfHighTime) and not na(htfLowTime) and ((dirLive == 1 and not mtfUp) or (dirLive == -1 and mtfUp))
 
-        // Bearish path magnets
-        f_pushLevel(levelsB, trig)
-        f_pushLevel(levelsB, targetB)
-        f_pushLevel(levelsB, lvn)
-        f_pushLevel(levelsB, macroFib50)
-        f_pushLevel(levelsB, poc)
+            bool w4Overlap = strictMode and w3Confirmed and (dirLive == 1 ? w4Target <= w1 : w4Target >= w1)
+            bool w4OverlapLive = strictMode and w3Confirmed and (dirLive == 1 ? low <= w1 : high >= w1)
+            bool invalidPath = strictMode and (w2Invalid or w4Overlap or w4OverlapLive)
+            color baseCol = invalidPath ? pathInvalidCol : (dirLive == 1 ? pathACol : pathBCol)
+            int ghostOpacity = math.min(100, pathOpacity + (htfOpposite ? 50 : 0))
+            bool w3InProgress = not invalidPath and w3PivotFormed and not w3Reached
+            color w3StatusColor = w3Confirmed ? (dirLive == 1 ? pathACol : pathBCol) : color.rgb(48, 214, 255)
+            color ghostCol = invalidPath ? color.new(pathInvalidCol, ghostOpacity) : color.new(w3StatusColor, ghostOpacity)
+            color boxCol = color.new(baseCol, math.min(90, ghostOpacity + 10))
+            ghostStyle = invalidPath ? line.style_dotted : line.style_solid
+            float boxPad = syminfo.mintick * 4
+            int boxLeft = bar_index + 1
+            int boxRight = bar_index + stepW3
 
-        bool showAPath = (activeScen == 1) or (activeScen == 0)
-        bool showBPath = (activeScen == -1) or (activeScen == 0)
+            f_seg(pathLinesA, b0, w0, b1, w1, baseCol, line.style_solid, 2)
+            f_seg(pathLinesA, b1, w1, b2, w2, baseCol, line.style_solid, 2)
+            if showPathLabels
+                array.push(pathLabelsA, label.new(b0, w0, "0", xloc=xloc.bar_index, yloc=yloc.price,
+                     textcolor=waveLabelTextCol, color=baseCol, style=label.style_label_center, size=pathLblSize))
+                array.push(pathLabelsA, label.new(b1, w1, "1", xloc=xloc.bar_index, yloc=yloc.price,
+                     textcolor=waveLabelTextCol, color=baseCol, style=label.style_label_center, size=pathLblSize))
+                array.push(pathLabelsA, label.new(b2, w2, "2", xloc=xloc.bar_index, yloc=yloc.price,
+                     textcolor=waveLabelTextCol, color=baseCol, style=label.style_label_center, size=pathLblSize))
 
-        if showAPath
-            f_buildPath(pathLinesA, bar_index, close, levelsA, pathACol, lineStylePath, pathWidth, 1, segCount)
-        if showBPath
-            f_buildPath(pathLinesB, bar_index, close, levelsB, pathBCol, lineStylePath, pathWidth, -1, segCount)
+            f_seg(pathLinesA, b2, w2, x3, w3Anchor, ghostCol, ghostStyle, 2)
+            string w3StatusText = w3Confirmed ? "W3 Confirmed" : (w3InProgress ? "W3 In Progress" : "W3")
+            if showPathLabels
+                array.push(pathLabelsA, label.new(x3, w3Anchor, w3StatusText, xloc=xloc.bar_index, yloc=yloc.price,
+                     textcolor=waveLabelTextCol, color=w3StatusColor, style=label.style_label_center, size=pathLblSize))
+
+            array.push(pathBoxes, box.new(boxLeft, w3Target1618 + boxPad, boxRight, w3Target1618 - boxPad,
+                 xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol))
+            array.push(pathBoxes, box.new(boxLeft, w3Target2618 + boxPad, boxRight, w3Target2618 - boxPad,
+                 xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol))
+            if invalidPath and showPathLabels
+                float invalidYOffset = syminfo.mintick * 10
+                array.push(pathLabelsA, label.new(x3 + 2, w3Anchor - (dirLive * invalidYOffset), "Soft Invalidated", xloc=xloc.bar_index, yloc=yloc.price,
+                     textcolor=color.white, color=color.new(pathInvalidCol, 0), style=label.style_label_left, size=pathLblSize))
+            if showPathDebug
+                string dirText = dirLive == 1 ? "Bull" : "Bear"
+                string htfText = mtfUp ? "Bull" : "Bear"
+                string dbg = "Dir: " + dirText + "\nHTF: " + htfText
+                dbg := dbg + "\nDirBase: " + str.tostring(dirBase) + "\nDirLive: " + str.tostring(dirLive)
+                dbg := dbg + "\nW0: " + str.tostring(w0, format.mintick)
+                dbg := dbg + "\nW1: " + str.tostring(w1, format.mintick)
+                dbg := dbg + "\nW2: " + str.tostring(w2, format.mintick)
+                dbg := dbg + "\nW1Dur: " + str.tostring(wave1Dur) + "\nW2Dur: " + str.tostring(wave2Dur)
+                dbg := dbg + "\nStepW3: " + str.tostring(stepW3)
+                dbg := dbg + "\nStepW4: " + str.tostring(stepW4)
+                dbg := dbg + "\nStepW5: " + str.tostring(stepW5)
+                dbg := dbg + "\nW3Target: " + str.tostring(w3Target, format.mintick)
+                dbg := dbg + "\nW3Anchor: " + str.tostring(w3Anchor, format.mintick)
+                dbg := dbg + "\nW3Status: " + w3StatusText
+                pathDebugLabel := label.new(bar_index, close, dbg,
+                     xloc=xloc.bar_index, yloc=yloc.price,
+                     style=label.style_label_left,
+                     color=color.new(color.black, 70), textcolor=color.white,
+                     size=pathDebugSize)
+
+            if w3Confirmed and not na(w4Target)
+                if w4FlatProjected
+                    f_seg(pathLinesA, x3, w4Target, x4, w4Target, ghostCol, ghostStyle, 2)
+                else
+                    f_seg(pathLinesA, x3, w3Anchor, x4, w4Target, ghostCol, ghostStyle, 2)
+                if showPathLabels
+                    array.push(pathLabelsA, label.new(x4, w4Target, "4", xloc=xloc.bar_index, yloc=yloc.price,
+                         textcolor=waveLabelTextCol, color=ghostCol, style=label.style_label_center, size=pathLblSize))
+                int w4BoxLeft = w4FlatProjected ? x3 : boxLeft
+                int w4BoxRight = w4FlatProjected ? x4 : boxRight
+                array.push(pathBoxes, box.new(w4BoxLeft, w4Target + boxPad, w4BoxRight, w4Target - boxPad,
+                     xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol))
+
+                float w5Target11 = w4Target + dirLive * wave1Len
+                f_seg(pathLinesA, x4, w4Target, x5, w5Target11, ghostCol, ghostStyle, 2)
+                if showPathLabels
+                    array.push(pathLabelsA, label.new(x5, w5Target11, "5", xloc=xloc.bar_index, yloc=yloc.price,
+                         textcolor=waveLabelTextCol, color=ghostCol, style=label.style_label_center, size=pathLblSize))
+
+                if w4RetraceLive > 0.5 and showPathLabels
+                    array.push(pathLabelsA, label.new(bar_index, close, "Soft Invalidated", xloc=xloc.bar_index, yloc=yloc.price,
+                         textcolor=color.white, color=color.new(color.red, 0), style=label.style_label_left, size=pathLblSize))
 
     // Draw Elliott Wave scaffold
-    if showWaves
+    if showWaves and showStandardPattern
         int waveCount = array.size(waveBars)
         if waveCount > 1
             for i = 1 to waveCount - 1
@@ -645,79 +859,249 @@ if barstate.islast
                 int x2 = array.get(waveBars, i)
                 float y1 = array.get(wavePrices, i - 1)
                 float y2 = array.get(wavePrices, i)
-                f_seg(waveLines, x1, y1, x2, y2, waveCol, lineStyleWave, waveWidth)
+                f_seg(waveLines, x1, y1, x2, y2, standardColor, lineStyleWave, waveWidth)
         if waveCount > 0
             for i = 0 to waveCount - 1
-                string wName = "(" + str.tostring(i + 1) + ")"
-                int waveDir = array.get(waveDirs, i)
-                // Place label above highs, below lows to avoid overlap with line
-                labelStyle = waveDir == 1 ? label.style_label_down : label.style_label_up
-                array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wName, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveCol, color=color.new(waveCol, 100), style=labelStyle, size=size.small))
+                string wText = ""
+                if structureType == "Correction"
+                    if i == 0
+                        wText := "A"
+                    else if i == 1
+                        wText := "B"
+                    else if i == 2
+                        wText := "C"
+                    else
+                        wText := str.tostring(i + 1)
+                else
+                    wText := showWaveZero ? str.tostring(i) : str.tostring(i + 1)
+                array.push(waveLabels, label.new(array.get(waveBars, i), array.get(wavePrices, i), wText, xloc=xloc.bar_index, yloc=yloc.price, textcolor=waveLabelTextCol, color=standardColor, style=label.style_label_center, size=size.small))
 
     // Draw Visible Range Volume Profile (VRVP)
     if showVRVP
-        // Get visible time range
-        int startTime = chart.left_visible_bar_time
-        int endTime = chart.right_visible_bar_time
-
-        // Find price range and start bar within visible time
+        int leftTime = chart.left_visible_bar_time
+        int rightTime = chart.right_visible_bar_time
+        int maxLookback = math.min(4999, bar_index)
+        int leftOffset = 0
+        int rightOffset = na
+        int visibleBars = 0
         float maxPrice = -1.0
         float minPrice = 1.0e15
-        int startBarIndex = 0
 
-        for i = 0 to 4999
-            if time[i] < startTime
-                startBarIndex := i
+        for i = 0 to maxLookback
+            bool inRange = time[i] >= leftTime and time[i] <= rightTime
+            if inRange
+                visibleBars += 1
+                float h = nz(high[i])
+                float l = nz(low[i])
+                if h > 0 and l > 0
+                    maxPrice := math.max(maxPrice, h)
+                    minPrice := math.min(minPrice, l)
+            if time[i] < leftTime
+                leftOffset := i
                 break
-            float h = nz(high[i])
-            float l = nz(low[i])
-            if h > 0 and l > 0
-                maxPrice := math.max(maxPrice, h)
-                minPrice := math.min(minPrice, l)
+            if na(rightOffset) and time[i] == rightTime
+                rightOffset := i
+
+        int leftBarIndex = bar_index - leftOffset
+        int rightBarIndex = na(rightOffset) ? bar_index : bar_index - rightOffset
 
         float priceRange = maxPrice - minPrice
 
-        if priceRange > 0
-            float step = priceRange / vrvpRows
-            float[] volUp = array.new_float(vrvpRows, 0.0)
-            float[] volDown = array.new_float(vrvpRows, 0.0)
-            float[] volTotal = array.new_float(vrvpRows, 0.0)
-            float totalVpVolume = 0.0
+        if priceRange > 0 and visibleBars > 0
+            int vrvpDisplayRows = math.min(vrvpRows, vrvpInternalRows)
+            float vrvpWeightEps = 0.000001
+            float internalRowHeight = priceRange / vrvpInternalRows
+            float displayRowHeight = priceRange / vrvpDisplayRows
+            int profileWidthBars = math.max(1, math.round(visibleBars * (vrvpWidth / 100.0)))
 
-            // Collect volume data by row
-            for i = 0 to startBarIndex
-                float avgPrice = (high[i] + low[i]) / 2
-                int rowIdx = math.floor((avgPrice - minPrice) / step)
-                rowIdx := math.min(math.max(rowIdx, 0), vrvpRows - 1)
+            if vrvpShowDebug
+                array.push(vrvpLines, line.new(leftBarIndex, maxPrice, rightBarIndex, maxPrice,
+                     xloc=xloc.bar_index, color=color.new(color.orange, 0), width=1, style=line.style_dotted))
+                array.push(vrvpLines, line.new(leftBarIndex, minPrice, rightBarIndex, minPrice,
+                     xloc=xloc.bar_index, color=color.new(color.orange, 0), width=1, style=line.style_dotted))
 
-                float v = nz(volume[i])
-                if v > 0
-                    totalVpVolume := totalVpVolume + v
-                    if close[i] >= open[i]
-                        array.set(volUp, rowIdx, array.get(volUp, rowIdx) + v)
+            var float[] intUpVol = array.new_float(vrvpInternalRows, 0.0)
+            var float[] intDownVol = array.new_float(vrvpInternalRows, 0.0)
+            var float[] intTotalVol = array.new_float(vrvpInternalRows, 0.0)
+            var float[] touchUp = array.new_float(vrvpDisplayRows, 0.0)
+            var float[] touchDown = array.new_float(vrvpDisplayRows, 0.0)
+
+            for i = 0 to vrvpInternalRows - 1
+                array.set(intUpVol, i, 0.0)
+                array.set(intDownVol, i, 0.0)
+                array.set(intTotalVol, i, 0.0)
+
+            for i = 0 to vrvpDisplayRows - 1
+                array.set(touchUp, i, 0.0)
+                array.set(touchDown, i, 0.0)
+
+            for i = 0 to leftOffset
+                bool inRange = time[i] >= leftTime and time[i] <= rightTime
+                if inRange
+                    float barHigh = high[i]
+                    float barLow = low[i]
+                    float barRange = barHigh - barLow
+                    float barVol = nz(volume[i])
+                    bool isUpBar = close[i] >= open[i]
+
+                    if barVol > 0 and barRange >= 0
+                        if barRange < syminfo.mintick
+                            int rowIdx = int(math.floor((close[i] - minPrice) / internalRowHeight))
+                            rowIdx := math.max(0, math.min(rowIdx, vrvpInternalRows - 1))
+                            if isUpBar
+                                array.set(intUpVol, rowIdx, array.get(intUpVol, rowIdx) + barVol)
+                            else
+                                array.set(intDownVol, rowIdx, array.get(intDownVol, rowIdx) + barVol)
+                            array.set(intTotalVol, rowIdx, array.get(intTotalVol, rowIdx) + barVol)
+                        else
+                            int rowStart = int(math.floor((barLow - minPrice) / internalRowHeight))
+                            int rowEnd = int(math.floor((barHigh - minPrice) / internalRowHeight))
+                            rowStart := math.max(0, math.min(rowStart, vrvpInternalRows - 1))
+                            rowEnd := math.max(0, math.min(rowEnd, vrvpInternalRows - 1))
+
+                            float totalWeight = 0.0
+                            float volCenter = switch vrvpDistribution
+                                "Typical Price Weighted" => (barHigh + barLow + close[i]) / 3
+                                "Close Weighted" => close[i]
+                                => (barHigh + barLow) / 2
+                            float halfSpread = barRange / 2
+
+                            for r = rowStart to rowEnd
+                                float rowBottom = minPrice + (r * internalRowHeight)
+                                float rowTop = rowBottom + internalRowHeight
+                                float rowMid = (rowBottom + rowTop) / 2
+                                float weight = 0.0
+
+                                if vrvpDistribution == "Uniform"
+                                    float overlapTop = math.min(barHigh, rowTop)
+                                    float overlapBottom = math.max(barLow, rowBottom)
+                                    float overlapRange = overlapTop - overlapBottom
+                                    weight := overlapRange > 0 ? overlapRange / barRange : 0.0
+                                else
+                                    float overlapTop = math.min(barHigh, rowTop)
+                                    float overlapBottom = math.max(barLow, rowBottom)
+                                    if overlapTop > overlapBottom
+                                        weight := math.max(vrvpWeightEps, f_triangleWeight(rowMid, volCenter, halfSpread))
+
+                                totalWeight := totalWeight + weight
+
+                            if totalWeight > 0
+                                for r = rowStart to rowEnd
+                                    float rowBottom = minPrice + (r * internalRowHeight)
+                                    float rowTop = rowBottom + internalRowHeight
+                                    float rowMid = (rowBottom + rowTop) / 2
+                                    float weight = 0.0
+
+                                    if vrvpDistribution == "Uniform"
+                                        float overlapTop = math.min(barHigh, rowTop)
+                                        float overlapBottom = math.max(barLow, rowBottom)
+                                        float overlapRange = overlapTop - overlapBottom
+                                        weight := overlapRange > 0 ? overlapRange / barRange : 0.0
+                                    else
+                                        float overlapTop = math.min(barHigh, rowTop)
+                                        float overlapBottom = math.max(barLow, rowBottom)
+                                        if overlapTop > overlapBottom
+                                            weight := math.max(vrvpWeightEps, f_triangleWeight(rowMid, volCenter, halfSpread))
+
+                                    if weight > 0
+                                        float volContrib = barVol * (weight / totalWeight)
+                                        if isUpBar
+                                            array.set(intUpVol, r, array.get(intUpVol, r) + volContrib)
+                                        else
+                                            array.set(intDownVol, r, array.get(intDownVol, r) + volContrib)
+                                        array.set(intTotalVol, r, array.get(intTotalVol, r) + volContrib)
+                    int touchStart = int(math.floor((barLow - minPrice) / displayRowHeight))
+                    int touchEnd = int(math.floor((barHigh - minPrice) / displayRowHeight))
+                    touchStart := math.max(0, math.min(touchStart, vrvpDisplayRows - 1))
+                    touchEnd := math.max(0, math.min(touchEnd, vrvpDisplayRows - 1))
+                    for t = touchStart to touchEnd
+                        if isUpBar
+                            array.set(touchUp, t, array.get(touchUp, t) + 1)
+                        else
+                            array.set(touchDown, t, array.get(touchDown, t) + 1)
+
+            var float[] volUp = array.new_float(vrvpDisplayRows, 0.0)
+            var float[] volDown = array.new_float(vrvpDisplayRows, 0.0)
+            var float[] volTotal = array.new_float(vrvpDisplayRows, 0.0)
+
+            for i = 0 to vrvpDisplayRows - 1
+                array.set(volUp, i, 0.0)
+                array.set(volDown, i, 0.0)
+                array.set(volTotal, i, 0.0)
+
+            for i = 0 to vrvpInternalRows - 1
+                float internalRowMid = minPrice + (i * internalRowHeight) + (internalRowHeight / 2)
+                int displayIdx = int(math.floor((internalRowMid - minPrice) / displayRowHeight))
+                displayIdx := math.max(0, math.min(displayIdx, vrvpDisplayRows - 1))
+                array.set(volUp, displayIdx, array.get(volUp, displayIdx) + array.get(intUpVol, i))
+                array.set(volDown, displayIdx, array.get(volDown, displayIdx) + array.get(intDownVol, i))
+                array.set(volTotal, displayIdx, array.get(volTotal, displayIdx) + array.get(intTotalVol, i))
+
+            for i = 0 to vrvpDisplayRows - 1
+                if array.get(volTotal, i) == 0 and (array.get(touchUp, i) + array.get(touchDown, i)) > 0
+                    if array.get(touchUp, i) >= array.get(touchDown, i)
+                        array.set(volUp, i, vrvpWeightEps)
                     else
-                        array.set(volDown, rowIdx, array.get(volDown, rowIdx) + v)
-                    array.set(volTotal, rowIdx, array.get(volTotal, rowIdx) + v)
+                        array.set(volDown, i, vrvpWeightEps)
+                    array.set(volTotal, i, vrvpWeightEps)
 
-            // Find POC (row with max volume)
+            if vrvpShowDebug
+                int minTouchIdx = na
+                int maxTouchIdx = na
+                for i = 0 to vrvpDisplayRows - 1
+                    if (array.get(touchUp, i) + array.get(touchDown, i)) > 0
+                        if na(minTouchIdx)
+                            minTouchIdx := i
+                        maxTouchIdx := i
+                if not na(minTouchIdx)
+                    float touchMinPrice = minPrice + (displayRowHeight * minTouchIdx)
+                    float touchMaxPrice = minPrice + (displayRowHeight * (maxTouchIdx + 1))
+                    array.push(vrvpLines, line.new(leftBarIndex, touchMaxPrice, rightBarIndex, touchMaxPrice,
+                         xloc=xloc.bar_index, color=color.new(color.purple, 0), width=1, style=line.style_dotted))
+                    array.push(vrvpLines, line.new(leftBarIndex, touchMinPrice, rightBarIndex, touchMinPrice,
+                         xloc=xloc.bar_index, color=color.new(color.purple, 0), width=1, style=line.style_dotted))
+                string debugText = "VRVP\nBars: " + str.tostring(visibleBars) + "\nRows: " + str.tostring(vrvpDisplayRows)
+                debugText := debugText + "\nMin: " + str.tostring(minPrice, format.mintick)
+                debugText := debugText + "\nMax: " + str.tostring(maxPrice, format.mintick)
+                if not na(minTouchIdx)
+                    debugText := debugText + "\nTouchMin: " + str.tostring(minPrice + (displayRowHeight * minTouchIdx), format.mintick)
+                    debugText := debugText + "\nTouchMax: " + str.tostring(minPrice + (displayRowHeight * (maxTouchIdx + 1)), format.mintick)
+                debugText := debugText + "\nLeftIdx: " + str.tostring(leftBarIndex)
+                debugText := debugText + "\nRightIdx: " + str.tostring(rightBarIndex)
+                vrvpSummaryLabel := label.new(x=rightBarIndex, y=maxPrice, text=debugText,
+                     xloc=xloc.bar_index, style=label.style_label_left,
+                     color=color.new(color.black, 70), textcolor=color.white,
+                     size=size.small)
+
+            if vrvpShowDebug and vrvpDebugTouchRows
+                for i = 0 to vrvpDisplayRows - 1
+                    if (array.get(touchUp, i) + array.get(touchDown, i)) > 0
+                        float boxBottom = minPrice + (displayRowHeight * i)
+                        float boxTop = minPrice + (displayRowHeight * (i + 1))
+                        array.push(vrvpDebugBoxes, box.new(leftBarIndex, boxTop, rightBarIndex, boxBottom,
+                             xloc=xloc.bar_index, border_width=1, border_color=color.new(color.purple, 0),
+                             bgcolor=color.new(color.purple, 100)))
+
+            float totalVpVolume = 0.0
             float maxVolInRow = 0.0
             int pocIdx = -1
-            for i = 0 to vrvpRows - 1
+
+            for i = 0 to vrvpDisplayRows - 1
                 float v = array.get(volTotal, i)
+                totalVpVolume := totalVpVolume + v
                 if v > maxVolInRow
                     maxVolInRow := v
                     pocIdx := i
 
-            // Calculate Value Area
             int vaTopIdx = pocIdx
             int vaBottomIdx = pocIdx
             float currentVaVol = maxVolInRow
             float targetVaVol = totalVpVolume * (vrvpValueArea / 100.0)
 
             int loopSafety = 0
-            while currentVaVol < targetVaVol and loopSafety < vrvpRows
+            while currentVaVol < targetVaVol and loopSafety < vrvpDisplayRows
                 loopSafety := loopSafety + 1
-                float upVol = (vaTopIdx < vrvpRows - 1) ? array.get(volTotal, vaTopIdx + 1) : 0.0
+                float upVol = (vaTopIdx < vrvpDisplayRows - 1) ? array.get(volTotal, vaTopIdx + 1) : 0.0
                 float downVol = (vaBottomIdx > 0) ? array.get(volTotal, vaBottomIdx - 1) : 0.0
                 if upVol == 0 and downVol == 0
                     break
@@ -728,88 +1112,161 @@ if barstate.islast
                     vaBottomIdx := vaBottomIdx - 1
                     currentVaVol := currentVaVol + downVol
 
-            // Calculate key prices
-            float pocPrice = minPrice + (step * pocIdx) + (step / 2)
-            float vahPrice = minPrice + (step * vaTopIdx) + (step / 2)
-            float valPrice = minPrice + (step * vaBottomIdx) + (step / 2)
+            float pocPrice = minPrice + (displayRowHeight * pocIdx) + (displayRowHeight / 2)
+            float vahPrice = minPrice + (displayRowHeight * vaTopIdx) + (displayRowHeight / 2)
+            float valPrice = minPrice + (displayRowHeight * vaBottomIdx) + (displayRowHeight / 2)
 
-            // Draw histogram
-            int timeRange = endTime - startTime
-
-            for i = 0 to vrvpRows - 1
+            for i = 0 to vrvpDisplayRows - 1
                 float totalV = array.get(volTotal, i)
-                if totalV > 0
-                    float boxBottom = minPrice + (step * i)
-                    float boxTop = minPrice + (step * (i + 1))
-                    float widthRatio = (totalV / maxVolInRow) * (vrvpWidth / 100.0)
-                    int barLenTime = math.round(timeRange * widthRatio)
+                if totalV > 0 and maxVolInRow > 0
+                    float boxBottom = minPrice + (displayRowHeight * i)
+                    float boxTop = minPrice + (displayRowHeight * (i + 1))
+                    float widthRatio = (totalV / maxVolInRow)
+                    int barWidth = math.max(1, math.round(profileWidthBars * widthRatio))
 
-                    int boxLeft = (vrvpPlacement == "Right") ? endTime - barLenTime : startTime
-                    int boxRight = (vrvpPlacement == "Right") ? endTime : startTime + barLenTime
+                    int boxLeft = vrvpPlacement == "Right" ? rightBarIndex - barWidth : leftBarIndex
+                    int boxRight = vrvpPlacement == "Right" ? rightBarIndex : leftBarIndex + barWidth
 
                     bool isVa = (i >= vaBottomIdx and i <= vaTopIdx)
-                    bool isPoc = (i == pocIdx)
                     bool isUpBar = array.get(volUp, i) >= array.get(volDown, i)
 
                     color bgColor = na
-                    if isPoc
-                        bgColor := vrvpPocCol
+                    if isVa
+                        bgColor := isUpBar ? vrvpUpVolumeVA : vrvpDownVolumeVA
                     else
-                        if isVa
-                            bgColor := isUpBar ? vrvpUpVolumeVA : vrvpDownVolumeVA
-                        else
-                            bgColor := isUpBar ? vrvpUpVolumeOut : vrvpDownVolumeOut
+                        bgColor := isUpBar ? vrvpUpVolumeOut : vrvpDownVolumeOut
 
+                    color borderColor = vrvpBarBorder > 0 ? vrvpBarBorderColor : na
                     array.push(vrvpBoxes, box.new(boxLeft, boxTop, boxRight, boxBottom,
-                         xloc=xloc.bar_time, border_width=vrvpBarBorder, bgcolor=bgColor))
+                         xloc=xloc.bar_index, border_width=vrvpBarBorder, border_color=borderColor, bgcolor=bgColor))
 
-            // Draw POC line and label
             if vrvpShowPocLine
-                array.push(vrvpLines, line.new(startTime, pocPrice, endTime, pocPrice,
-                     xloc=xloc.bar_time, color=vrvpPocCol, width=vrvpPocLineWidth))
+                array.push(vrvpLines, line.new(leftBarIndex, pocPrice, rightBarIndex, pocPrice,
+                     xloc=xloc.bar_index, color=vrvpPocCol, width=vrvpPocLineWidth))
 
             if vrvpShowPocLabel
                 string priceText = "POC: " + str.tostring(pocPrice, format.mintick)
-                vrvpPocLabel := label.new(x=(vrvpPlacement == "Right" ? startTime : endTime),
-                     y=pocPrice, text=priceText, xloc=xloc.bar_time,
+                vrvpPocLabel := label.new(x=(vrvpPlacement == "Right" ? leftBarIndex : rightBarIndex),
+                     y=pocPrice, text=priceText, xloc=xloc.bar_index,
                      color=color.new(vrvpPocCol, 0), textcolor=color.black,
                      style=label.style_label_left, size=size.small)
 
-            // Draw VAH line
             if vrvpShowVahLine and not na(vahPrice)
-                line vahLine = line.new(startTime, vahPrice, endTime, vahPrice,
-                     xloc=xloc.bar_time, color=vrvpVahCol, width=vrvpVahValLineWidth)
+                line vahLine = line.new(leftBarIndex, vahPrice, rightBarIndex, vahPrice,
+                     xloc=xloc.bar_index, color=vrvpVahCol, width=vrvpVahValLineWidth)
                 array.push(vrvpLines, vahLine)
 
-            // Draw VAL line
             if vrvpShowValLine and not na(valPrice)
-                line valLine = line.new(startTime, valPrice, endTime, valPrice,
-                     xloc=xloc.bar_time, color=vrvpValCol, width=vrvpVahValLineWidth)
+                line valLine = line.new(leftBarIndex, valPrice, rightBarIndex, valPrice,
+                     xloc=xloc.bar_index, color=vrvpValCol, width=vrvpVahValLineWidth)
                 array.push(vrvpLines, valLine)
 
-            // Draw VA fill
             if vrvpShowVaFill and not na(vahPrice) and not na(valPrice)
-                line vahFillLine = line.new(startTime, vahPrice, endTime, vahPrice,
-                     xloc=xloc.bar_time, color=color.new(color.white, 100), width=1)
-                line valFillLine = line.new(startTime, valPrice, endTime, valPrice,
-                     xloc=xloc.bar_time, color=color.new(color.white, 100), width=1)
+                line vahFillLine = line.new(leftBarIndex, vahPrice, rightBarIndex, vahPrice,
+                     xloc=xloc.bar_index, color=color.new(color.white, 100), width=1)
+                line valFillLine = line.new(leftBarIndex, valPrice, rightBarIndex, valPrice,
+                     xloc=xloc.bar_index, color=color.new(color.white, 100), width=1)
                 array.push(vrvpLines, vahFillLine)
                 array.push(vrvpLines, valFillLine)
                 array.push(vrvpFills, linefill.new(vahFillLine, valFillLine, vrvpVaFillCol))
 
-            // Draw summary box
             if vrvpShowSummary
                 string summaryText = "POC: " + str.tostring(pocPrice, format.mintick)
                 summaryText := summaryText + "\nVAH: " + str.tostring(vahPrice, format.mintick)
                 summaryText := summaryText + "\nVAL: " + str.tostring(valPrice, format.mintick)
 
-                int summaryX = vrvpPlacement == "Right" ? endTime : startTime
+                int summaryX = vrvpPlacement == "Right" ? rightBarIndex : leftBarIndex
                 float summaryY = vahPrice + ((vahPrice - valPrice) * 0.2)
 
                 vrvpSummaryLabel := label.new(x=summaryX, y=summaryY, text=summaryText,
-                     xloc=xloc.bar_time, style=label.style_label_left,
+                     xloc=xloc.bar_index, style=label.style_label_left,
                      color=color.new(color.rgb(40, 92, 160), 20), textcolor=color.white,
                      size=size.normal)
+
+            if vrvpMtfEnabled
+                var float[] mtfTotals = array.new_float(vrvpInternalRows, 0.0)
+                for i = 0 to vrvpInternalRows - 1
+                    array.set(mtfTotals, i, 0.0)
+
+                for i = 0 to leftOffset
+                    bool inRange = time[i] >= leftTime and time[i] <= rightTime
+                    if inRange
+                        float barHigh = mtfHigh[i]
+                        float barLow = mtfLow[i]
+                        float barRange = barHigh - barLow
+                        float barVol = nz(mtfVolume[i])
+
+                        if barVol > 0 and barRange >= 0
+                            if barRange < syminfo.mintick
+                                int rowIdx = int(math.floor((mtfClose[i] - minPrice) / internalRowHeight))
+                                rowIdx := math.max(0, math.min(rowIdx, vrvpInternalRows - 1))
+                                array.set(mtfTotals, rowIdx, array.get(mtfTotals, rowIdx) + barVol)
+                            else
+                                int rowStart = int(math.floor((barLow - minPrice) / internalRowHeight))
+                                int rowEnd = int(math.floor((barHigh - minPrice) / internalRowHeight))
+                                rowStart := math.max(0, math.min(rowStart, vrvpInternalRows - 1))
+                                rowEnd := math.max(0, math.min(rowEnd, vrvpInternalRows - 1))
+
+                                float totalWeight = 0.0
+                                float volCenter = switch vrvpDistribution
+                                    "Typical Price Weighted" => (barHigh + barLow + mtfClose[i]) / 3
+                                    "Close Weighted" => mtfClose[i]
+                                    => (barHigh + barLow) / 2
+                                float halfSpread = barRange / 2
+
+                                for r = rowStart to rowEnd
+                                    float rowBottom = minPrice + (r * internalRowHeight)
+                                    float rowTop = rowBottom + internalRowHeight
+                                    float rowMid = (rowBottom + rowTop) / 2
+                                    float weight = 0.0
+
+                                    if vrvpDistribution == "Uniform"
+                                        float overlapTop = math.min(barHigh, rowTop)
+                                        float overlapBottom = math.max(barLow, rowBottom)
+                                        float overlapRange = overlapTop - overlapBottom
+                                        weight := overlapRange > 0 ? overlapRange / barRange : 0.0
+                                    else
+                                        float overlapTop = math.min(barHigh, rowTop)
+                                        float overlapBottom = math.max(barLow, rowBottom)
+                                        if overlapTop > overlapBottom
+                                            weight := math.max(vrvpWeightEps, f_triangleWeight(rowMid, volCenter, halfSpread))
+
+                                    totalWeight := totalWeight + weight
+
+                                if totalWeight > 0
+                                    for r = rowStart to rowEnd
+                                        float rowBottom = minPrice + (r * internalRowHeight)
+                                        float rowTop = rowBottom + internalRowHeight
+                                        float rowMid = (rowBottom + rowTop) / 2
+                                        float weight = 0.0
+
+                                        if vrvpDistribution == "Uniform"
+                                            float overlapTop = math.min(barHigh, rowTop)
+                                            float overlapBottom = math.max(barLow, rowBottom)
+                                            float overlapRange = overlapTop - overlapBottom
+                                            weight := overlapRange > 0 ? overlapRange / barRange : 0.0
+                                        else
+                                            float overlapTop = math.min(barHigh, rowTop)
+                                            float overlapBottom = math.max(barLow, rowBottom)
+                                            if overlapTop > overlapBottom
+                                                weight := math.max(vrvpWeightEps, f_triangleWeight(rowMid, volCenter, halfSpread))
+
+                                        if weight > 0
+                                            float volContrib = barVol * (weight / totalWeight)
+                                            array.set(mtfTotals, r, array.get(mtfTotals, r) + volContrib)
+
+                float mtfMaxVol = 0.0
+                int mtfPocIdx = -1
+                for i = 0 to vrvpInternalRows - 1
+                    float v = array.get(mtfTotals, i)
+                    if v > mtfMaxVol
+                        mtfMaxVol := v
+                        mtfPocIdx := i
+
+                if mtfPocIdx >= 0
+                    float mtfPocPrice = minPrice + (internalRowHeight * mtfPocIdx) + (internalRowHeight / 2)
+                    array.push(vrvpLines, line.new(leftBarIndex, mtfPocPrice, rightBarIndex, mtfPocPrice,
+                         xloc=xloc.bar_index, color=vrvpPocCol, width=math.max(1, vrvpPocLineWidth - 1), style=line.style_dashed))
 
     // Draw message label
     string msg = "SCAN\n"
@@ -835,7 +1292,8 @@ if barstate.islast
         else
             msg := "CHOP/UNDECIDED\nNear VWAP and trigger\nWait for confirmation"
 
-    msgLabel := label.new(msgX, msgY, msg, style=lblStyle, textalign=text.align_left, size=lblSize, textcolor=labelTextCol, color=labelBgCol, xloc=xloc.bar_index, yloc=yloc.price)
+    if showMessage
+        msgLabel := label.new(msgX, msgY, msg, style=lblStyle, textalign=text.align_left, size=lblSize, textcolor=labelTextCol, color=labelBgCol, xloc=xloc.bar_index, yloc=yloc.price)
 
 // ============================================================================
 // ALERTS
