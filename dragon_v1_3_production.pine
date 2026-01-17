@@ -1160,12 +1160,37 @@ if barstate.islast
         // Position message above current price action using bar index reference
         // This provides more stable positioning than using recent high/low
         float currentRange = high - low
-        float msgY = high + (currentRange * 0.15)  // 15% above current bar's high
         int msgX = bar_index + msgXOffset - 50
+
+        // Check if label would overlap with nearby candles
+        // Calculate where label would be placed above
+        float tentativeLabelY = high + (currentRange * 0.15)
+
+        // Check if any nearby bars would overlap with that position
+        bool hasOverlap = false
+        for i = 0 to math.min(50, bar_index)  // Check last 50 bars
+            if high[i] >= tentativeLabelY
+                hasOverlap := true
+                break
+
+        // Place below if overlap detected
+        bool placeBelow = hasOverlap
+
+        float msgY = na
+        string labelStyle = ""
+
+        if placeBelow
+            // Place below - use upper_right style (label extends down)
+            msgY := low - (currentRange * 0.15)
+            labelStyle := label.style_label_upper_right
+        else
+            // Place above - use lower_right style (label extends up)
+            msgY := high + (currentRange * 0.15)
+            labelStyle := label.style_label_lower_right
 
         msgLabel := label.new(msgX, msgY, msg,
              xloc=xloc.bar_index, yloc=yloc.price,
-             style=label.style_label_lower_right,
+             style=labelStyle,
              textcolor=labelTextCol, color=labelBgCol,
              size=lblSize, textalign=text.align_left)
 
