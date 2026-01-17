@@ -9,53 +9,98 @@ indicator("Dragon v1.3: VWAP + Pivots + Dual Fibs + Nodes + Paths (2 Scenarios)"
 // ============================================================================
 // INPUTS
 // ============================================================================
-groupCore = "Core"
-src = input.source(hlc3, "VWAP Source", group=groupCore, display=display.none)
-vpLookback = input.int(200, "Volume Nodes Lookback (bars)", minval=50, maxval=600, group=groupCore, display=display.none)
-showPivots = input.bool(false, "Show Pivot Markers", group=groupCore, display=display.none)
 
-groupFibs = "Fibs"
-showFibs = input.bool(true, "Show Fib Lines (Macro + Micro)", group=groupFibs, display=display.none)
-showMacroRetrace = input.bool(true, "Show Macro Retracements", group=groupFibs, display=display.none)
-showMacroExt = input.bool(true, "Show Macro Extensions", group=groupFibs, display=display.none)
-showMicroRetrace = input.bool(true, "Show Micro Retracements", group=groupFibs, display=display.none)
-showMicroExt = input.bool(true, "Show Micro Extensions", group=groupFibs, display=display.none)
-fibMacroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Macro Fib Color", group=groupFibs, display=display.none)
-fibMacroWidth = input.int(1, "Macro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
-fibMacroStyle = input.string("Dotted", "Macro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
-fibMicroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Micro Fib Color", group=groupFibs, display=display.none)
-fibMicroWidth = input.int(1, "Micro Fib Width", minval=1, maxval=5, group=groupFibs, display=display.none)
-fibMicroStyle = input.string("Solid", "Micro Fib Style", options=["Solid","Dotted","Dashed"], group=groupFibs, display=display.none)
+// ───────────────────────────────────────────────────────────────────────────
+// CORE SETTINGS
+// ───────────────────────────────────────────────────────────────────────────
+groupCore = "━━━ Core Settings ━━━"
+showVwapOnChart = input.bool(true, "Show VWAP", group=groupCore, inline="vwap1")
+vwapCol = input.color(color.rgb(233, 30, 99), "", group=groupCore, inline="vwap1")
+vwapWidth = input.int(1, "Width", minval=1, maxval=5, group=groupCore, inline="vwap1")
 
-groupVRVP = "Visible Range Volume Profile"
-showVRVP = input.bool(true, "Show VRVP", group=groupVRVP, display=display.none)
-vrvpRows = input.int(100, "Rows (Resolution)", minval=10, maxval=500, group=groupVRVP, display=display.none)
-vrvpWidth = input.int(40, "Profile Width (%)", minval=1, maxval=100, group=groupVRVP, display=display.none)
-vrvpValueArea = input.int(70, "Value Area (%)", minval=0, maxval=100, group=groupVRVP, display=display.none)
-vrvpPlacement = input.string("Left", "Placement", options=["Left", "Right"], group=groupVRVP, display=display.none)
-vrvpBarBorder = input.int(1, "Bar Border Width", minval=0, maxval=3, group=groupVRVP, display=display.none)
-vrvpBarBorderColor = input.color(color.new(color.white, 0), "Bar Border Color", group=groupVRVP, display=display.none)
-vrvpDistribution = input.string("Typical Price Weighted", "Volume Distribution", options=["Uniform", "Typical Price Weighted", "Close Weighted"], group=groupVRVP, display=display.none)
-vrvpUpVolumeVA = input.color(color.new(color.rgb(33, 150, 243), 40), "Up Volume (Inside VA)", group=groupVRVP, display=display.none)
-vrvpDownVolumeVA = input.color(color.new(color.rgb(100, 181, 246), 40), "Down Volume (Inside VA)", group=groupVRVP, display=display.none)
-vrvpUpVolumeOut = input.color(color.new(color.rgb(0, 100, 80), 60), "Up Volume (Outside VA)", group=groupVRVP, display=display.none)
-vrvpDownVolumeOut = input.color(color.new(color.rgb(180, 40, 50), 60), "Down Volume (Outside VA)", group=groupVRVP, display=display.none)
-vrvpShowPocLine = input.bool(true, "Show POC Line", group=groupVRVP, display=display.none)
-vrvpPocCol = input.color(color.new(color.red, 0), "POC Color", group=groupVRVP, display=display.none)
-vrvpPocLineWidth = input.int(2, "POC Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
-vrvpShowPocLabel = input.bool(true, "Show POC Label", group=groupVRVP, display=display.none)
-vrvpShowVahLine = input.bool(true, "Show VAH Line", group=groupVRVP, display=display.none)
-vrvpVahCol = input.color(color.new(color.rgb(33, 150, 243), 80), "VAH Color", group=groupVRVP, display=display.none)
-vrvpShowValLine = input.bool(true, "Show VAL Line", group=groupVRVP, display=display.none)
-vrvpValCol = input.color(color.new(color.rgb(33, 150, 243), 80), "VAL Color", group=groupVRVP, display=display.none)
-vrvpVahValLineWidth = input.int(1, "VAH/VAL Line Width", minval=1, maxval=5, group=groupVRVP, display=display.none)
-vrvpShowVaFill = input.bool(true, "Show VA Fill", group=groupVRVP, display=display.none)
-vrvpVaFillCol = input.color(color.new(color.rgb(33, 150, 243), 92), "VA Fill Color", group=groupVRVP, display=display.none)
-vrvpShowSummary = input.bool(false, "Show Summary Box", group=groupVRVP, display=display.none)
-vrvpMtfEnabled = input.bool(false, "Multi-Timeframe POC", group=groupVRVP, display=display.none)
-vrvpMtfTimeframe = input.timeframe("D", "MTF Timeframe", group=groupVRVP, display=display.none)
-vrvpShowDebug = input.bool(false, "Show VRVP Debug", group=groupVRVP, display=display.none)
-vrvpDebugTouchRows = input.bool(false, "Debug Touch Rows", group=groupVRVP, display=display.none)
+src = input.source(hlc3, "VWAP Source", group=groupCore, inline="vwap2")
+showVwapPlot = input.bool(false, "Show on price scale", group=groupCore, inline="vwap2")
+
+vpLookback = input.int(200, "Volume Nodes Lookback", minval=50, maxval=600, group=groupCore)
+showPivots = input.bool(false, "Show Pivot Markers", group=groupCore)
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIBONACCI LEVELS
+// ───────────────────────────────────────────────────────────────────────────
+groupFibs = "━━━ Fibonacci Levels ━━━"
+showFibs = input.bool(true, "Enable Fibonacci Levels", group=groupFibs)
+
+// Macro Fibs (Session-based)
+fibMacroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Macro Color", group=groupFibs, inline="macroStyle")
+fibMacroWidth = input.int(1, "Width", minval=1, maxval=5, group=groupFibs, inline="macroStyle")
+fibMacroStyle = input.string("Dotted", "Style", options=["Solid","Dotted","Dashed"], group=groupFibs, inline="macroStyle")
+
+showMacroFib50 = input.bool(true, "0.5", group=groupFibs, inline="macroRetrace")
+showMacroFib618 = input.bool(true, "0.618", group=groupFibs, inline="macroRetrace")
+showMacroExt1272 = input.bool(true, "1.272", group=groupFibs, inline="macroExt1")
+showMacroExt1618 = input.bool(true, "1.618", group=groupFibs, inline="macroExt1")
+showMacroExt2000 = input.bool(true, "2.0", group=groupFibs, inline="macroExt2")
+showMacroExt2618 = input.bool(true, "2.618", group=groupFibs, inline="macroExt2")
+showMacroExt3618 = input.bool(true, "3.618", group=groupFibs, inline="macroExt2")
+
+// Micro Fibs (Pivot-based)
+fibMicroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Micro Color", group=groupFibs, inline="microStyle")
+fibMicroWidth = input.int(1, "Width", minval=1, maxval=5, group=groupFibs, inline="microStyle")
+fibMicroStyle = input.string("Solid", "Style", options=["Solid","Dotted","Dashed"], group=groupFibs, inline="microStyle")
+
+showMicroFib50 = input.bool(true, "0.5", group=groupFibs, inline="microRetrace")
+showMicroFib618 = input.bool(true, "0.618", group=groupFibs, inline="microRetrace")
+showMicroExt1272 = input.bool(true, "1.272", group=groupFibs, inline="microExt1")
+showMicroExt1618 = input.bool(true, "1.618", group=groupFibs, inline="microExt1")
+showMicroExt2000 = input.bool(true, "2.0", group=groupFibs, inline="microExt2")
+showMicroExt2618 = input.bool(true, "2.618", group=groupFibs, inline="microExt2")
+showMicroExt3618 = input.bool(true, "3.618", group=groupFibs, inline="microExt2")
+
+// ───────────────────────────────────────────────────────────────────────────
+// VOLUME PROFILE
+// ───────────────────────────────────────────────────────────────────────────
+groupVRVP = "━━━ Volume Profile (VRVP) ━━━"
+showVRVP = input.bool(true, "Enable VRVP", group=groupVRVP)
+
+vrvpPlacement = input.string("Left", "Placement", options=["Left", "Right"], group=groupVRVP, inline="vrvp1")
+vrvpWidth = input.int(40, "Width %", minval=1, maxval=100, group=groupVRVP, inline="vrvp1")
+vrvpRows = input.int(100, "Resolution", minval=10, maxval=500, group=groupVRVP, inline="vrvp2")
+vrvpValueArea = input.int(70, "Value Area %", minval=0, maxval=100, group=groupVRVP, inline="vrvp2")
+
+vrvpDistribution = input.string("Typical Price Weighted", "Volume Distribution", options=["Uniform", "Typical Price Weighted", "Close Weighted"], group=groupVRVP)
+
+// POC Settings
+vrvpShowPocLine = input.bool(true, "Show POC Line", group=groupVRVP, inline="poc")
+vrvpPocCol = input.color(color.new(color.red, 0), "", group=groupVRVP, inline="poc")
+vrvpPocLineWidth = input.int(2, "Width", minval=1, maxval=5, group=groupVRVP, inline="poc")
+vrvpShowPocLabel = input.bool(false, "Label", group=groupVRVP, inline="poc")
+
+// VAH/VAL Settings
+vrvpShowVahLine = input.bool(true, "Show VAH", group=groupVRVP, inline="vah")
+vrvpShowValLine = input.bool(true, "VAL", group=groupVRVP, inline="vah")
+vrvpVahCol = input.color(color.new(color.rgb(33, 150, 243), 80), "", group=groupVRVP, inline="vah")
+vrvpValCol = input.color(color.new(color.rgb(33, 150, 243), 80), "", group=groupVRVP, inline="vah")
+vrvpVahValLineWidth = input.int(1, "Width", minval=1, maxval=5, group=groupVRVP, inline="vah")
+
+// VA Fill
+vrvpShowVaFill = input.bool(true, "Show VA Fill", group=groupVRVP, inline="vaFill")
+vrvpVaFillCol = input.color(color.new(color.rgb(33, 150, 243), 92), "", group=groupVRVP, inline="vaFill")
+
+// Volume Bar Colors
+vrvpUpVolumeVA = input.color(color.new(color.rgb(33, 150, 243), 40), "Up Vol (Inside VA)", group=groupVRVP, inline="volCol1")
+vrvpDownVolumeVA = input.color(color.new(color.rgb(100, 181, 246), 40), "Down Vol (Inside VA)", group=groupVRVP, inline="volCol2")
+vrvpUpVolumeOut = input.color(color.new(color.rgb(0, 100, 80), 60), "Up Vol (Outside VA)", group=groupVRVP, inline="volCol3")
+vrvpDownVolumeOut = input.color(color.new(color.rgb(180, 40, 50), 60), "Down Vol (Outside VA)", group=groupVRVP, inline="volCol4")
+
+vrvpBarBorder = input.int(1, "Bar Border Width", minval=0, maxval=3, group=groupVRVP, inline="border")
+vrvpBarBorderColor = input.color(color.new(color.white, 0), "", group=groupVRVP, inline="border")
+
+// Advanced
+vrvpMtfEnabled = input.bool(false, "Multi-Timeframe POC", group=groupVRVP, inline="mtf")
+vrvpMtfTimeframe = input.timeframe("D", "", group=groupVRVP, inline="mtf")
+vrvpShowSummary = input.bool(false, "Show Summary Box", group=groupVRVP)
+vrvpShowDebug = input.bool(false, "Show Debug", group=groupVRVP, inline="debug")
+vrvpDebugTouchRows = input.bool(false, "Touch Rows", group=groupVRVP, inline="debug")
 
 // Internal resolution (fixed)
 int vrvpInternalRows = 400
@@ -67,22 +112,31 @@ mtfOpen = request.security(syminfo.tickerid, vrvpMtfTimeframe, open, barmerge.ga
 mtfClose = request.security(syminfo.tickerid, vrvpMtfTimeframe, close, barmerge.gaps_off, barmerge.lookahead_off)
 mtfVolume = request.security(syminfo.tickerid, vrvpMtfTimeframe, volume, barmerge.gaps_off, barmerge.lookahead_off)
 
-groupPath = "Paths"
-showPaths = input.bool(true, "Show Predictive Paths", group=groupPath, inline="pathRow1", display=display.none)
-pathOpacity = input.int(70, "Path Opacity", minval=0, maxval=100, group=groupPath, inline="pathRow1", display=display.none)
-showPathLabels = input.bool(true, "Show Labels", group=groupPath, inline="pathRow1b", display=display.none)
-pathLabelSizeOpt = input.string("Small", "Label Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathRow1b", display=display.none)
-wave3RatioOpt = input.string("1.618", "Wave 3 Ratio", options=["1.618", "2.618"], group=groupPath, inline="pathRow2", display=display.none)
-wave4RetraceOpt = input.string("0.382", "Wave 4 Retrace", options=["0.382", "0.5"], group=groupPath, inline="pathRow2", display=display.none)
-pathACol = input.color(color.rgb(61, 170, 106), "Bull Color", group=groupPath, inline="pathRow3", display=display.none)
-pathBCol = input.color(color.rgb(205, 78, 76), "Bear Color", group=groupPath, inline="pathRow3", display=display.none)
-pathInvalidCol = input.color(color.gray, "Invalid Color", group=groupPath, inline="pathRow3", display=display.none)
-waveLabelTextCol = input.color(color.white, "Wave Label Text Color", group=groupPath, inline="pathRow4", display=display.none)
-pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupPath, inline="pathRow4", display=display.none)
-strictMode = input.bool(true, "Strict Mode", group=groupPath, inline="pathRow4", display=display.none)
-showW3Zones = input.bool(true, "Show W3 Target Zones", group=groupPath, inline="pathRow4b", display=display.none)
-showPathDebug = input.bool(false, "Show Path Debug", group=groupPath, inline="pathRow4c", display=display.none)
-pathDebugSizeOpt = input.string("Small", "Debug Label Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathRow4c", display=display.none)
+// ───────────────────────────────────────────────────────────────────────────
+// ELLIOTT WAVE PATHS
+// ───────────────────────────────────────────────────────────────────────────
+groupPath = "━━━ Elliott Wave Paths ━━━"
+showPaths = input.bool(true, "Enable Predictive Paths", group=groupPath)
+
+pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupPath, inline="path1")
+strictMode = input.bool(true, "Strict Mode", group=groupPath, inline="path1")
+
+wave3RatioOpt = input.string("1.618", "Wave 3 Ratio", options=["1.618", "2.618"], group=groupPath, inline="path2")
+wave4RetraceOpt = input.string("0.382", "Wave 4 Retrace", options=["0.382", "0.5"], group=groupPath, inline="path2")
+
+pathOpacity = input.int(70, "Path Opacity", minval=0, maxval=100, group=groupPath, inline="path3")
+showW3Zones = input.bool(true, "Show W3 Target Zones", group=groupPath, inline="path3")
+
+pathACol = input.color(color.rgb(61, 170, 106), "Bull Path", group=groupPath, inline="pathCol")
+pathBCol = input.color(color.rgb(205, 78, 76), "Bear Path", group=groupPath, inline="pathCol")
+pathInvalidCol = input.color(color.gray, "Invalid", group=groupPath, inline="pathCol")
+
+showPathLabels = input.bool(true, "Show Wave Labels", group=groupPath, inline="pathLbl")
+waveLabelTextCol = input.color(color.white, "", group=groupPath, inline="pathLbl")
+pathLabelSizeOpt = input.string("Small", "Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathLbl")
+
+showPathDebug = input.bool(false, "Show Debug", group=groupPath, inline="pathDebug")
+pathDebugSizeOpt = input.string("Small", "Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathDebug")
 
 // HTF series for wave alignment (fixed 4h)
 htfHighTime = request.security(syminfo.tickerid, "240",
@@ -92,17 +146,17 @@ htfLowTime = request.security(syminfo.tickerid, "240",
      ta.valuewhen(not na(ta.pivotlow(low, pivotLen, pivotLen)), time, 0),
      barmerge.gaps_off, barmerge.lookahead_off)
 
-groupMsg = "Message"
-showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
-msgXOffset = input.int(5, "X Offset (bars from right)", minval=1, maxval=50, group=groupMsg, display=display.none)
-labelSizeOpt = input.string("Normal", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
-labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
-labelBgCol = input.color(color.new(color.rgb(40, 92, 160), 30), "Message Background Color", group=groupMsg, display=display.none)
+// ───────────────────────────────────────────────────────────────────────────
+// MESSAGE LABEL
+// ───────────────────────────────────────────────────────────────────────────
+groupMsg = "━━━ Scenario Message ━━━"
+showMessage = input.bool(true, "Show Message Label", group=groupMsg)
 
-showVwapPlot = input.bool(false, "Show VWAP on price scale", display=display.none)
-showVwapOnChart = input.bool(true, "Show VWAP on chart", group=groupCore, display=display.none)
-vwapWidth = input.int(1, "VWAP Width", minval=1, maxval=5, group=groupCore, display=display.none)
-vwapCol = input.color(color.rgb(233, 30, 99), "VWAP Color", group=groupCore, display=display.none)
+msgXOffset = input.int(5, "X Offset (bars)", minval=1, maxval=50, group=groupMsg, inline="msgPos")
+labelSizeOpt = input.string("Normal", "Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, inline="msgPos")
+
+labelTextCol = input.color(color.white, "Text Color", group=groupMsg, inline="msgCol")
+labelBgCol = input.color(color.new(color.rgb(40, 92, 160), 30), "Background", group=groupMsg, inline="msgCol")
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -524,26 +578,36 @@ if barstate.islast
         int macroLabelX = macroLeftX - 8
         int microLabelX = microLeftX - 8
 
-        if showMacroRetrace
+        // Macro Fibonacci levels (individual toggles)
+        if showMacroFib50
             f_fibLineWithLabel(fibLines, fibLabels, macroFib50, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "0.5 | " + str.tostring(macroFib50, format.mintick), size.small)
+        if showMacroFib618
             f_fibLineWithLabel(fibLines, fibLabels, macroFib618, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "0.618 | " + str.tostring(macroFib618, format.mintick), size.small)
-
-        if showMacroExt
+        if showMacroExt1272
             f_fibLineWithLabel(fibLines, fibLabels, macroExt1272, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "1.272 | " + str.tostring(macroExt1272, format.mintick), size.small)
+        if showMacroExt1618
             f_fibLineWithLabel(fibLines, fibLabels, macroExt1618, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "1.618 | " + str.tostring(macroExt1618, format.mintick), size.small)
+        if showMacroExt2000
             f_fibLineWithLabel(fibLines, fibLabels, macroExt2000, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "2.0 | " + str.tostring(macroExt2000, format.mintick), size.small)
+        if showMacroExt2618
             f_fibLineWithLabel(fibLines, fibLabels, macroExt2618, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "2.618 | " + str.tostring(macroExt2618, format.mintick), size.small)
+        if showMacroExt3618
             f_fibLineWithLabel(fibLines, fibLabels, macroExt3618, macroLabelX, rightX, fibMacroCol, lineStyleMacro, fibMacroWidth, "3.618 | " + str.tostring(macroExt3618, format.mintick), size.small)
 
-        if showMicroRetrace
+        // Micro Fibonacci levels (individual toggles)
+        if showMicroFib50
             f_fibLineWithLabel(fibLines, fibLabels, microFib50, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "0.5 | " + str.tostring(microFib50, format.mintick), size.small)
+        if showMicroFib618
             f_fibLineWithLabel(fibLines, fibLabels, microFib618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "0.618 | " + str.tostring(microFib618, format.mintick), size.small)
-
-        if showMicroExt
+        if showMicroExt1272
             f_fibLineWithLabel(fibLines, fibLabels, microExt1272, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "1.272 | " + str.tostring(microExt1272, format.mintick), size.small)
+        if showMicroExt1618
             f_fibLineWithLabel(fibLines, fibLabels, microExt1618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "1.618 | " + str.tostring(microExt1618, format.mintick), size.small)
+        if showMicroExt2000
             f_fibLineWithLabel(fibLines, fibLabels, microExt2000, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "2.0 | " + str.tostring(microExt2000, format.mintick), size.small)
+        if showMicroExt2618
             f_fibLineWithLabel(fibLines, fibLabels, microExt2618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "2.618 | " + str.tostring(microExt2618, format.mintick), size.small)
+        if showMicroExt3618
             f_fibLineWithLabel(fibLines, fibLabels, microExt3618, microLabelX, rightX, fibMicroCol, lineStyleMicro, fibMicroWidth, "3.618 | " + str.tostring(microExt3618, format.mintick), size.small)
 
     // Draw predictive paths (local pivots only)
