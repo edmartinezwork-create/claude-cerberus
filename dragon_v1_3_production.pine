@@ -1157,10 +1157,10 @@ if barstate.islast
         msg := "⚪ NEUTRAL\nAt VWAP\n\nWait for confirmation"
 
     if showMessage
-        // Position message above recent price action
-        float adjustedHigh = recentHigh + 5
-        float priceRange = recentHigh - recentLow
-        float msgY = adjustedHigh + (priceRange * 0.05)  // 5% above recent high
+        // Position message above current price action using bar index reference
+        // This provides more stable positioning than using recent high/low
+        float currentRange = high - low
+        float msgY = high + (currentRange * 0.15)  // 15% above current bar's high
         int msgX = bar_index + msgXOffset - 50
 
         msgLabel := label.new(msgX, msgY, msg,
