@@ -108,7 +108,7 @@ htfLowTime = request.security(syminfo.tickerid, "240",
 
 groupMsg = "Message"
 showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
-msgPosition = input.string("Top Right", "Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=groupMsg, display=display.none)
+msgXOffset = input.int(5, "X Offset (bars from right)", minval=1, maxval=50, group=groupMsg, display=display.none)
 labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
 labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
 labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
@@ -227,20 +227,6 @@ f_triangleWeight(_price, _center, _halfWidth) =>
     else
         float distance = math.abs(_price - _center)
         math.max(0.0, 1.0 - (distance / _halfWidth))
-
-// Convert position string to Pine Script position constant
-f_tablePosition(_posStr) =>
-    switch _posStr
-        "Top Left" => position.top_left
-        "Top Center" => position.top_center
-        "Top Right" => position.top_right
-        "Middle Left" => position.middle_left
-        "Middle Center" => position.middle_center
-        "Middle Right" => position.middle_right
-        "Bottom Left" => position.bottom_left
-        "Bottom Center" => position.bottom_center
-        "Bottom Right" => position.bottom_right
-        => position.bottom_left
 
 // Draw fibonacci line with label - line starts after label text
 f_fibLineWithLabel(_lines, _labels, _y, _leftX, _rightX, _col, _style, _w, _labelText, _labelSize) =>
@@ -585,7 +571,7 @@ var line[] vrvpLines = array.new_line()
 var linefill[] vrvpFills = array.new_linefill()
 var label vrvpPocLabel = na
 var label vrvpSummaryLabel = na
-var table msgTable = na
+var label msgLabel = na
 var label pathDebugLabel = na
 
 lineStyleMacro = f_lineStyle(fibMacroStyle)
@@ -635,6 +621,8 @@ if barstate.islast
             box.delete(array.get(pathBoxes, k))
         array.clear(pathBoxes)
 
+    if not na(msgLabel)
+        label.delete(msgLabel)
     if not na(pathDebugLabel)
         label.delete(pathDebugLabel)
 
@@ -1299,8 +1287,17 @@ if barstate.islast
             msg := "CHOP/UNDECIDED\nNear VWAP and trigger\nWait for confirmation"
 
     if showMessage
-        msgTable := table.new(f_tablePosition(msgPosition), 1, 1, bgcolor=color.new(color.black, 100), border_width=0)
-        table.cell(msgTable, 0, 0, msg, text_color=labelTextCol, bgcolor=labelBgCol, text_size=lblSize, text_halign=text.align_left)
+        // Position message above recent price action
+        float recentHigh = ta.highest(high, 20)
+        float priceRange = ta.highest(high, 20) - ta.lowest(low, 20)
+        float msgY = recentHigh + (priceRange * 0.05)  // 5% above recent high
+        int msgX = bar_index + msgXOffset
+
+        msgLabel := label.new(msgX, msgY, msg,
+             xloc=xloc.bar_index, yloc=yloc.price,
+             style=label.style_label_down,
+             textcolor=labelTextCol, color=labelBgCol,
+             size=lblSize, textalign=text.align_left)
 
 // ============================================================================
 // ALERTS
