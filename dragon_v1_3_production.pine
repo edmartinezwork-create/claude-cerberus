@@ -80,8 +80,9 @@ pathInvalidCol = input.color(color.gray, "Invalid Color", group=groupPath, inlin
 waveLabelTextCol = input.color(color.white, "Wave Label Text Color", group=groupPath, inline="pathRow4", display=display.none)
 pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupPath, inline="pathRow4", display=display.none)
 strictMode = input.bool(true, "Strict Mode", group=groupPath, inline="pathRow4", display=display.none)
-showPathDebug = input.bool(false, "Show Path Debug", group=groupPath, inline="pathRow4b", display=display.none)
-pathDebugSizeOpt = input.string("Small", "Debug Label Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathRow4b", display=display.none)
+showW3Zones = input.bool(true, "Show W3 Target Zones", group=groupPath, inline="pathRow4b", display=display.none)
+showPathDebug = input.bool(false, "Show Path Debug", group=groupPath, inline="pathRow4c", display=display.none)
+pathDebugSizeOpt = input.string("Small", "Debug Label Size", options=["Tiny","Small","Normal","Large"], group=groupPath, inline="pathRow4c", display=display.none)
 
 // HTF series for wave alignment (fixed 4h)
 htfHighTime = request.security(syminfo.tickerid, "240",
@@ -634,9 +635,10 @@ if barstate.islast
             bool w3InProgress = not invalidPath and w3PivotFormed and not w3Reached
             color w3StatusColor = w3Confirmed ? (dirLive == 1 ? pathACol : pathBCol) : color.rgb(48, 214, 255)
             color ghostCol = invalidPath ? color.new(pathInvalidCol, ghostOpacity) : color.new(w3StatusColor, ghostOpacity)
-            color boxCol = color.new(baseCol, 85)
+            color boxCol = color.new(baseCol, 70)
             ghostStyle = invalidPath ? line.style_dotted : line.style_solid
-            float boxPad = syminfo.mintick * 4
+            float priceRangeW3 = math.abs(w3Target2618 - w2)
+            float boxHeight = priceRangeW3 * 0.02  // 2% of the W3 range
             int boxLeft = bar_index + 1
             int boxRight = bar_index + stepW3
 
@@ -656,10 +658,12 @@ if barstate.islast
                 array.push(pathLabelsA, label.new(x3, w3Anchor, w3StatusText, xloc=xloc.bar_index, yloc=yloc.price,
                      textcolor=waveLabelTextCol, color=w3StatusColor, style=label.style_label_center, size=pathLblSize))
 
-            array.push(pathBoxes, box.new(boxLeft, w3Target1618 + boxPad, boxRight, w3Target1618 - boxPad,
-                 xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol))
-            array.push(pathBoxes, box.new(boxLeft, w3Target2618 + boxPad, boxRight, w3Target2618 - boxPad,
-                 xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol))
+            // Draw W3 target zone boxes (spanning from W2 to projected W3)
+            if showW3Zones
+                array.push(pathBoxes, box.new(boxLeft, w3Target1618 + boxHeight, boxRight, w3Target1618 - boxHeight,
+                     xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol, border_width=1))
+                array.push(pathBoxes, box.new(boxLeft, w3Target2618 + boxHeight, boxRight, w3Target2618 - boxHeight,
+                     xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol, border_width=1))
             if invalidPath and showPathLabels
                 float invalidYOffset = syminfo.mintick * 10
                 array.push(pathLabelsA, label.new(x3 + 2, w3Anchor - (dirLive * invalidYOffset), "Soft Invalidated", xloc=xloc.bar_index, yloc=yloc.price,
@@ -679,6 +683,10 @@ if barstate.islast
                 dbg := dbg + "\nW3Target: " + str.tostring(w3Target, format.mintick)
                 dbg := dbg + "\nW3Anchor: " + str.tostring(w3Anchor, format.mintick)
                 dbg := dbg + "\nW3Status: " + w3StatusText
+                dbg := dbg + "\nBoxLeft: " + str.tostring(boxLeft) + " BoxRight: " + str.tostring(boxRight)
+                dbg := dbg + "\nBoxCol: " + str.tostring(color.r(boxCol)) + "," + str.tostring(color.g(boxCol)) + "," + str.tostring(color.b(boxCol))
+                dbg := dbg + "\nW3_1618: " + str.tostring(w3Target1618, format.mintick)
+                dbg := dbg + "\nW3_2618: " + str.tostring(w3Target2618, format.mintick)
                 pathDebugLabel := label.new(bar_index, close, dbg,
                      xloc=xloc.bar_index, yloc=yloc.price,
                      style=label.style_label_left,
@@ -693,10 +701,11 @@ if barstate.islast
                 if showPathLabels
                     array.push(pathLabelsA, label.new(x4, w4Target, "4", xloc=xloc.bar_index, yloc=yloc.price,
                          textcolor=waveLabelTextCol, color=ghostCol, style=label.style_label_center, size=pathLblSize))
-                int w4BoxLeft = w4FlatProjected ? x3 : boxLeft
-                int w4BoxRight = w4FlatProjected ? x4 : boxRight
-                array.push(pathBoxes, box.new(w4BoxLeft, w4Target + boxPad, w4BoxRight, w4Target - boxPad,
-                     xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol))
+                if showW3Zones
+                    int w4BoxLeft = w4FlatProjected ? x3 : boxLeft
+                    int w4BoxRight = w4FlatProjected ? x4 : boxRight
+                    array.push(pathBoxes, box.new(w4BoxLeft, w4Target + boxHeight, w4BoxRight, w4Target - boxHeight,
+                         xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol, border_width=1))
 
                 float w5Target11 = w4Target + dirLive * wave1Len
                 f_seg(pathLinesA, x4, w4Target, x5, w5Target11, ghostCol, ghostStyle, 2)
