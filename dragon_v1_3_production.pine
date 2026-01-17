@@ -584,6 +584,10 @@ lblSize = f_size(labelSizeOpt)
 pathLblSize = f_size(pathLabelSizeOpt)
 pathDebugSize = f_size(pathDebugSizeOpt)
 
+// Calculate message position values on every bar for consistency
+float recentHigh = ta.highest(high, 20)
+float recentLow = ta.lowest(low, 20)
+
 if barstate.islast
     // Clear all previous drawings
     f_clearLines(fibLines)
@@ -1288,8 +1292,7 @@ if barstate.islast
 
     if showMessage
         // Position message above recent price action
-        float recentHigh = ta.highest(high, 20)
-        float priceRange = ta.highest(high, 20) - ta.lowest(low, 20)
+        float priceRange = recentHigh - recentLow
         float msgY = recentHigh + (priceRange * 0.05)  // 5% above recent high
         int msgX = bar_index + msgXOffset
 
