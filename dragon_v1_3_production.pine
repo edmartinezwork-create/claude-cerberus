@@ -77,6 +77,7 @@ wave4RetraceOpt = input.string("0.382", "Wave 4 Retrace", options=["0.382", "0.5
 pathACol = input.color(color.rgb(61, 170, 106), "Bull Color", group=groupPath, inline="pathRow3", display=display.none)
 pathBCol = input.color(color.rgb(205, 78, 76), "Bear Color", group=groupPath, inline="pathRow3", display=display.none)
 pathInvalidCol = input.color(color.gray, "Invalid Color", group=groupPath, inline="pathRow3", display=display.none)
+waveLabelTextCol = input.color(color.white, "Wave Label Text Color", group=groupPath, inline="pathRow4", display=display.none)
 pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=groupPath, inline="pathRow4", display=display.none)
 strictMode = input.bool(true, "Strict Mode", group=groupPath, inline="pathRow4", display=display.none)
 showPathDebug = input.bool(false, "Show Path Debug", group=groupPath, inline="pathRow4b", display=display.none)
@@ -448,28 +449,6 @@ if barstate.islast
 
     hvn := vah
     lvn := val
-
-// ============================================================================
-// SCENARIO LOGIC (A = bullish, B = bearish)
-// ============================================================================
-float trig = na
-if useMicro618AsTrigger
-    trig := microFib618
-else
-    trig := microFib50
-
-float targetA = na
-float targetB = na
-
-if not na(microExt1272) and not na(hvn)
-    targetA := math.max(microExt1272, hvn)
-else
-    targetA := na(microExt1272) ? hvn : microExt1272
-
-if not na(poc) and not na(lvn)
-    targetB := math.min(poc, lvn)
-else
-    targetB := na(poc) ? lvn : poc
 
 // ============================================================================
 // DRAWING MANAGEMENT
