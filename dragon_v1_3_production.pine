@@ -467,6 +467,8 @@ var label vrvpPocLabel = na
 var label vrvpSummaryLabel = na
 var label msgLabel = na
 var label pathDebugLabel = na
+var string lastW3Status = na
+var float lastW3Target = na
 
 lineStyleMacro = f_lineStyle(fibMacroStyle)
 lineStyleMicro = f_lineStyle(fibMicroStyle)
@@ -654,6 +656,8 @@ if barstate.islast
 
             f_seg(pathLinesA, b2, w2, x3, w3Anchor, ghostCol, ghostStyle, 2)
             string w3StatusText = w3Confirmed ? "W3 Confirmed" : (w3InProgress ? "W3 In Progress" : "W3")
+            lastW3Status := w3StatusText
+            lastW3Target := w3Target
             if showPathLabels
                 array.push(pathLabelsA, label.new(x3, w3Anchor, w3StatusText, xloc=xloc.bar_index, yloc=yloc.price,
                      textcolor=waveLabelTextCol, color=w3StatusColor, style=label.style_label_center, size=pathLblSize))
@@ -1111,12 +1115,46 @@ if barstate.islast
 
     // Draw message label
     string msg = ""
+
+    // Determine bias
     if close > vwapVal
-        msg := "Above VWAP"
+        msg := "BULLISH\nAbove VWAP"
+
+        // Add primary target
+        if not na(hvn)
+            msg := msg + "\n\nTarget: " + str.tostring(hvn, format.mintick) + " (HVN)"
+        else if not na(poc)
+            msg := msg + "\n\nTarget: " + str.tostring(poc, format.mintick) + " (POC)"
+
+        // Add W3 status if available
+        if not na(lastW3Status) and not na(lastW3Target)
+            msg := msg + "\n\n" + lastW3Status
+            if lastW3Status != "W3 Confirmed"
+                msg := msg + "\nProjected: " + str.tostring(lastW3Target, format.mintick)
+
+        // Add invalidation
+        msg := msg + "\n\nInvalidate: Below VWAP"
+
     else if close < vwapVal
-        msg := "Below VWAP"
+        msg := "BEARISH\nBelow VWAP"
+
+        // Add primary target
+        if not na(lvn)
+            msg := msg + "\n\nTarget: " + str.tostring(lvn, format.mintick) + " (LVN)"
+        else if not na(poc)
+            msg := msg + "\n\nTarget: " + str.tostring(poc, format.mintick) + " (POC)"
+
+        // Add W3 status if available
+        if not na(lastW3Status) and not na(lastW3Target)
+            msg := msg + "\n\n" + lastW3Status
+            if lastW3Status != "W3 Confirmed"
+                msg := msg + "\nProjected: " + str.tostring(lastW3Target, format.mintick)
+
+        // Add invalidation
+        msg := msg + "\n\nInvalidate: Above VWAP"
+
     else
-        msg := "At VWAP"
+        msg := "NEUTRAL\nAt VWAP\n\nWait for confirmation"
 
     if showMessage
         // Position message above recent price action
