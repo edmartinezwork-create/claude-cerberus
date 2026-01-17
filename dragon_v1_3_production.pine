@@ -1118,43 +1118,43 @@ if barstate.islast
 
     // Determine bias
     if close > vwapVal
-        msg := "BULLISH\nAbove VWAP"
+        msg := "🟢 BULLISH\nAbove VWAP"
 
         // Add primary target
         if not na(hvn)
-            msg := msg + "\n\nTarget: " + str.tostring(hvn, format.mintick) + " (HVN)"
+            msg := msg + "\n\n🎯 Target: " + str.tostring(hvn, format.mintick) + " (HVN)"
         else if not na(poc)
-            msg := msg + "\n\nTarget: " + str.tostring(poc, format.mintick) + " (POC)"
+            msg := msg + "\n\n🎯 Target: " + str.tostring(poc, format.mintick) + " (POC)"
 
         // Add W3 status if available
         if not na(lastW3Status) and not na(lastW3Target)
-            msg := msg + "\n\n" + lastW3Status
+            msg := msg + "\n\n📊 " + lastW3Status
             if lastW3Status != "W3 Confirmed"
                 msg := msg + "\nProjected: " + str.tostring(lastW3Target, format.mintick)
 
         // Add invalidation
-        msg := msg + "\n\nInvalidate: Below VWAP"
+        msg := msg + "\n\n⛔ Invalidate: Below VWAP"
 
     else if close < vwapVal
-        msg := "BEARISH\nBelow VWAP"
+        msg := "🔴 BEARISH\nBelow VWAP"
 
         // Add primary target
         if not na(lvn)
-            msg := msg + "\n\nTarget: " + str.tostring(lvn, format.mintick) + " (LVN)"
+            msg := msg + "\n\n🎯 Target: " + str.tostring(lvn, format.mintick) + " (LVN)"
         else if not na(poc)
-            msg := msg + "\n\nTarget: " + str.tostring(poc, format.mintick) + " (POC)"
+            msg := msg + "\n\n🎯 Target: " + str.tostring(poc, format.mintick) + " (POC)"
 
         // Add W3 status if available
         if not na(lastW3Status) and not na(lastW3Target)
-            msg := msg + "\n\n" + lastW3Status
+            msg := msg + "\n\n📊 " + lastW3Status
             if lastW3Status != "W3 Confirmed"
                 msg := msg + "\nProjected: " + str.tostring(lastW3Target, format.mintick)
 
         // Add invalidation
-        msg := msg + "\n\nInvalidate: Above VWAP"
+        msg := msg + "\n\n⛔ Invalidate: Above VWAP"
 
     else
-        msg := "NEUTRAL\nAt VWAP\n\nWait for confirmation"
+        msg := "⚪ NEUTRAL\nAt VWAP\n\nWait for confirmation"
 
     if showMessage
         // Position message above recent price action
