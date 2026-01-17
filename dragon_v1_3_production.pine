@@ -1162,30 +1162,39 @@ if barstate.islast
         float currentRange = high - low
         int msgX = bar_index + msgXOffset - 50
 
-        // Check if label would overlap with nearby candles
-        // Calculate where label would be placed above
-        float tentativeLabelY = high + (currentRange * 0.15)
+        // Check both positions (above and below) for overlap
+        float labelAbove = high + (currentRange * 0.15)
+        float labelBelow = low - (currentRange * 0.15)
 
-        // Check if any nearby bars would overlap with that position
-        bool hasOverlap = false
-        for i = 0 to math.min(50, bar_index)  // Check last 50 bars
-            if high[i] >= tentativeLabelY
-                hasOverlap := true
+        // Check if placing above would overlap with nearby candles
+        bool overlapAbove = false
+        for i = 0 to math.min(50, bar_index)
+            if high[i] >= labelAbove
+                overlapAbove := true
                 break
 
-        // Place below if overlap detected
-        bool placeBelow = hasOverlap
+        // Check if placing below would overlap with nearby candles
+        bool overlapBelow = false
+        for i = 0 to math.min(50, bar_index)
+            if low[i] <= labelBelow
+                overlapBelow := true
+                break
 
+        // Choose position with no overlap, prefer above if both are clear
         float msgY = na
         string labelStyle = ""
 
-        if placeBelow
+        if not overlapAbove
+            // Place above - use lower_right style (label extends up)
+            msgY := labelAbove
+            labelStyle := label.style_label_lower_right
+        else if not overlapBelow
             // Place below - use upper_right style (label extends down)
-            msgY := low - (currentRange * 0.15)
+            msgY := labelBelow
             labelStyle := label.style_label_upper_right
         else
-            // Place above - use lower_right style (label extends up)
-            msgY := high + (currentRange * 0.15)
+            // Both have overlap, default to above
+            msgY := labelAbove
             labelStyle := label.style_label_lower_right
 
         msgLabel := label.new(msgX, msgY, msg,
