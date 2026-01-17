@@ -1161,12 +1161,12 @@ if barstate.islast
         // Find the highest/lowest points in the visible range where label will appear
         float maxHigh = high
         float minLow = low
-        for i = 0 to math.min(100, bar_index)
+        for i = 0 to math.min(200, bar_index)
             maxHigh := math.max(maxHigh, high[i])
             minLow := math.min(minLow, low[i])
 
         float priceRange = maxHigh - minLow
-        int msgX = bar_index + msgXOffset - 50
+        int msgX = bar_index + msgXOffset - 25
 
         // Check both positions (above and below) with larger offsets
         float labelAbove = maxHigh + (priceRange * 0.10)  // 10% above highest point
