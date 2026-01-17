@@ -660,9 +660,8 @@ if barstate.islast
 
             // Draw W3 target zone boxes (spanning from W2 to projected W3)
             if showW3Zones
-                array.push(pathBoxes, box.new(boxLeft, w3Target1618 + boxHeight, boxRight, w3Target1618 - boxHeight,
-                     xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol, border_width=1))
-                array.push(pathBoxes, box.new(boxLeft, w3Target2618 + boxHeight, boxRight, w3Target2618 - boxHeight,
+                // Single filled zone between 1.618 and 2.618 targets
+                array.push(pathBoxes, box.new(boxLeft, w3Target2618, boxRight, w3Target1618,
                      xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol, border_width=1))
             if invalidPath and showPathLabels
                 float invalidYOffset = syminfo.mintick * 10
@@ -704,7 +703,8 @@ if barstate.islast
                 if showW3Zones
                     int w4BoxLeft = w4FlatProjected ? x3 : boxLeft
                     int w4BoxRight = w4FlatProjected ? x4 : boxRight
-                    array.push(pathBoxes, box.new(w4BoxLeft, w4Target + boxHeight, w4BoxRight, w4Target - boxHeight,
+                    float w4BoxHeight = priceRangeW3 * 0.015  // Slightly thinner zone for W4
+                    array.push(pathBoxes, box.new(w4BoxLeft, w4Target + w4BoxHeight, w4BoxRight, w4Target - w4BoxHeight,
                          xloc=xloc.bar_index, bgcolor=boxCol, border_color=ghostCol, border_width=1))
 
                 float w5Target11 = w4Target + dirLive * wave1Len
