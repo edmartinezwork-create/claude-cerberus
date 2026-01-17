@@ -634,7 +634,7 @@ if barstate.islast
             bool w3InProgress = not invalidPath and w3PivotFormed and not w3Reached
             color w3StatusColor = w3Confirmed ? (dirLive == 1 ? pathACol : pathBCol) : color.rgb(48, 214, 255)
             color ghostCol = invalidPath ? color.new(pathInvalidCol, ghostOpacity) : color.new(w3StatusColor, ghostOpacity)
-            color boxCol = color.new(baseCol, math.min(90, ghostOpacity + 10))
+            color boxCol = color.new(baseCol, 85)
             ghostStyle = invalidPath ? line.style_dotted : line.style_solid
             float boxPad = syminfo.mintick * 4
             int boxLeft = bar_index + 1
