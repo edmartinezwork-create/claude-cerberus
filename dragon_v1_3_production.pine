@@ -108,8 +108,7 @@ htfLowTime = request.security(syminfo.tickerid, "240",
 
 groupMsg = "Message"
 showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
-msgPosition = input.string("Bottom Left", "Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=groupMsg, display=display.none)
-msgVerticalPadding = input.int(2, "Vertical Padding (rows above)", minval=0, maxval=10, group=groupMsg, display=display.none)
+msgPosition = input.string("Top Left", "Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=groupMsg, display=display.none)
 labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
 labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
 labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
@@ -1300,16 +1299,8 @@ if barstate.islast
             msg := "CHOP/UNDECIDED\nNear VWAP and trigger\nWait for confirmation"
 
     if showMessage
-        int totalRows = msgVerticalPadding + 1
-        msgTable := table.new(f_tablePosition(msgPosition), 1, totalRows, bgcolor=color.new(color.black, 100), border_width=0)
-
-        // Add transparent padding rows above
-        if msgVerticalPadding > 0
-            for i = 0 to msgVerticalPadding - 1
-                table.cell(msgTable, 0, i, "", text_color=color.new(color.white, 100), bgcolor=color.new(color.black, 100), text_size=size.tiny)
-
-        // Add actual message in bottom row
-        table.cell(msgTable, 0, msgVerticalPadding, msg, text_color=labelTextCol, bgcolor=labelBgCol, text_size=lblSize, text_halign=text.align_left)
+        msgTable := table.new(f_tablePosition(msgPosition), 1, 1, bgcolor=color.new(color.black, 100), border_width=0)
+        table.cell(msgTable, 0, 0, msg, text_color=labelTextCol, bgcolor=labelBgCol, text_size=lblSize, text_halign=text.align_left)
 
 // ============================================================================
 // ALERTS
