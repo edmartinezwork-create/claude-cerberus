@@ -108,7 +108,7 @@ htfLowTime = request.security(syminfo.tickerid, "240",
 
 groupMsg = "Message"
 showMessage = input.bool(true, "Show Message", group=groupMsg, display=display.none)
-msgPosition = input.string("Bottom Left", "Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=groupMsg, display=display.none)
+msgPosition = input.string("Middle Left", "Position", options=["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Center", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group=groupMsg, display=display.none)
 labelSizeOpt = input.string("Large", "Message Size", options=["Tiny","Small","Normal","Large"], group=groupMsg, display=display.none)
 labelTextCol = input.color(color.white, "Message Text Color", group=groupMsg, display=display.none)
 labelBgCol = input.color(color.rgb(40, 92, 160), "Message Background Color", group=groupMsg, display=display.none)
