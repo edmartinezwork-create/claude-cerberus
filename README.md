@@ -1,4 +1,3 @@
-# claude-cerberus
 # CLAUDE.pinescript.md
 
 ## Scope
