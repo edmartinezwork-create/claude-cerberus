@@ -1079,18 +1079,18 @@ if barstate.islast
                 array.push(vrvpLines, valFillLine)
                 array.push(vrvpFills, linefill.new(vahFillLine, valFillLine, vrvpVaFillCol))
 
-            if vrvpShowSummary
+            if vrvpShowSummary and not na(pocPrice) and not na(vahPrice) and not na(valPrice)
                 string summaryText = "POC: " + str.tostring(pocPrice, format.mintick)
                 summaryText := summaryText + "\nVAH: " + str.tostring(vahPrice, format.mintick)
                 summaryText := summaryText + "\nVAL: " + str.tostring(valPrice, format.mintick)
 
-                int summaryX = vrvpPlacement == "Right" ? rightBarIndex : leftBarIndex
-                float summaryY = vahPrice + ((vahPrice - valPrice) * 0.2)
+                int summaryX = vrvpPlacement == "Right" ? leftBarIndex : rightBarIndex
+                float summaryY = vahPrice + ((vahPrice - valPrice) * 0.1)  // 10% above VA
 
                 vrvpSummaryLabel := label.new(x=summaryX, y=summaryY, text=summaryText,
-                     xloc=xloc.bar_index, style=label.style_label_left,
+                     xloc=xloc.bar_index, style=label.style_label_right,
                      color=color.new(color.rgb(40, 92, 160), 20), textcolor=color.white,
-                     size=size.normal)
+                     size=size.small)
 
             if vrvpMtfEnabled
                 var float[] mtfTotals = array.new_float(vrvpInternalRows, 0.0)
