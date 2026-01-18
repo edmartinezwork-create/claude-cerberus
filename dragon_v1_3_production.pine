@@ -35,11 +35,11 @@ fibMacroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Macro Color",
 fibMacroWidth = input.int(1, "Width", minval=1, maxval=5, group=groupFibs, inline="macroStyle")
 fibMacroStyle = input.string("Dotted", "Style", options=["Solid","Dotted","Dashed"], group=groupFibs, inline="macroStyle")
 
-showMacroFib50 = input.bool(true, "0.5", group=groupFibs, inline="macroRetrace")
+showMacroFib50 = input.bool(false, "0.5", group=groupFibs, inline="macroRetrace")
 showMacroFib618 = input.bool(true, "0.618", group=groupFibs, inline="macroRetrace")
-showMacroExt1272 = input.bool(true, "1.272", group=groupFibs, inline="macroExt1")
+showMacroExt1272 = input.bool(false, "1.272", group=groupFibs, inline="macroExt1")
 showMacroExt1618 = input.bool(true, "1.618", group=groupFibs, inline="macroExt1")
-showMacroExt2000 = input.bool(true, "2.0", group=groupFibs, inline="macroExt2")
+showMacroExt2000 = input.bool(false, "2.0", group=groupFibs, inline="macroExt2")
 showMacroExt2618 = input.bool(true, "2.618", group=groupFibs, inline="macroExt2")
 showMacroExt3618 = input.bool(true, "3.618", group=groupFibs, inline="macroExt2")
 
@@ -48,11 +48,11 @@ fibMicroCol = input.color(color.new(color.rgb(230, 151, 67), 30), "Micro Color",
 fibMicroWidth = input.int(1, "Width", minval=1, maxval=5, group=groupFibs, inline="microStyle")
 fibMicroStyle = input.string("Solid", "Style", options=["Solid","Dotted","Dashed"], group=groupFibs, inline="microStyle")
 
-showMicroFib50 = input.bool(true, "0.5", group=groupFibs, inline="microRetrace")
+showMicroFib50 = input.bool(false, "0.5", group=groupFibs, inline="microRetrace")
 showMicroFib618 = input.bool(true, "0.618", group=groupFibs, inline="microRetrace")
-showMicroExt1272 = input.bool(true, "1.272", group=groupFibs, inline="microExt1")
+showMicroExt1272 = input.bool(false, "1.272", group=groupFibs, inline="microExt1")
 showMicroExt1618 = input.bool(true, "1.618", group=groupFibs, inline="microExt1")
-showMicroExt2000 = input.bool(true, "2.0", group=groupFibs, inline="microExt2")
+showMicroExt2000 = input.bool(false, "2.0", group=groupFibs, inline="microExt2")
 showMicroExt2618 = input.bool(true, "2.618", group=groupFibs, inline="microExt2")
 showMicroExt3618 = input.bool(true, "3.618", group=groupFibs, inline="microExt2")
 
