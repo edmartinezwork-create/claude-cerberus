@@ -1,0 +1,1067 @@
+// This Pine Script code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Dragon Detector and Forecast - Elliott Wave Enhanced
+// Version 12 | Pine Script v6 Compliant with Full Visual Suite
+//
+// NOTE: Elliott Wave labeling is simplified and does not implement full EW validation rules.
+// For proper Elliott Wave analysis, additional validation would be needed:
+// - Wave 2 cannot retrace more than 100% of Wave 1
+// - Wave 3 cannot be the shortest impulse wave
+// - Wave 4 cannot overlap Wave 1's price territory
+
+//@version=6
+indicator("Dragon Detector and Forecast - Elliott Wave Zones [v6]",
+     overlay=true,
+     max_lines_count=500,
+     max_labels_count=500,
+     max_boxes_count=200,
+     max_polylines_count=50,
+     max_bars_back=5000)
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const int DEFAULT_LOOKBACK = 100
+const int FUTURE_BARS      = 20
+
+// Hide inputs from status line and data window by default (per-input control).
+const INPUT_DISPLAY = display.none
+
+// ============================================================================
+// SECTION 1: INPUT GROUPS & CONFIGURATION
+// ============================================================================
+
+// --- General Settings ---
+string grpGeneral    = "=== General Settings ==="
+bool   showInfoTable = input.bool(true, "Show Info Table", group=grpGeneral, display=INPUT_DISPLAY)
+
+// --- Pivot Detection ---
+string grpPivot = "=== Pivot Detection ==="
+int    pivotLen = input.int(5, "Pivot Length", minval=2, maxval=50, group=grpPivot, display=INPUT_DISPLAY, tooltip="Controls swing detection sensitivity for Fibonacci anchoring")
+
+// --- Fibonacci Set 1 ---
+string grpFib1        = "=== Fibonacci Set 1 ==="
+bool   fib1Enabled    = input.bool(true, "Enable Fib Set 1", group=grpFib1, display=INPUT_DISPLAY)
+string fib1Mode       = input.string("Auto (Pivots)", "Anchor Mode", options=["Auto (Pivots)", "Manual (Fixed)"], group=grpFib1, display=INPUT_DISPLAY)
+float  fib1ManualHigh = input.float(0.0, "Manual High Price", group=grpFib1, display=INPUT_DISPLAY)
+float  fib1ManualLow  = input.float(0.0, "Manual Low Price", group=grpFib1, display=INPUT_DISPLAY)
+color  fib1Color      = input.color(color.yellow, "Fib 1 Color Theme", group=grpFib1, display=INPUT_DISPLAY)
+int    fib1LineWidth  = input.int(1, "Line Width", minval=1, maxval=3, group=grpFib1, display=INPUT_DISPLAY)
+bool   fib1ShowLabels = input.bool(true, "Show Labels", group=grpFib1, display=INPUT_DISPLAY)
+string fib1LabelSize  = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal", "Large"], group=grpFib1, display=INPUT_DISPLAY)
+
+// --- Fibonacci Set 2 ---
+string grpFib2        = "=== Fibonacci Set 2 ==="
+bool   fib2Enabled    = input.bool(false, "Enable Fib Set 2", group=grpFib2, display=INPUT_DISPLAY)
+string fib2Mode       = input.string("Manual (Fixed)", "Anchor Mode", options=["Auto (Pivots)", "Manual (Fixed)"], group=grpFib2, display=INPUT_DISPLAY)
+float  fib2ManualHigh = input.float(0.0, "Manual High Price", group=grpFib2, display=INPUT_DISPLAY)
+float  fib2ManualLow  = input.float(0.0, "Manual Low Price", group=grpFib2, display=INPUT_DISPLAY)
+color  fib2Color      = input.color(color.aqua, "Fib 2 Color Theme", group=grpFib2, display=INPUT_DISPLAY)
+int    fib2LineWidth  = input.int(1, "Line Width", minval=1, maxval=3, group=grpFib2, display=INPUT_DISPLAY)
+bool   fib2ShowLabels = input.bool(true, "Show Labels", group=grpFib2, display=INPUT_DISPLAY)
+string fib2LabelSize  = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal", "Large"], group=grpFib2, display=INPUT_DISPLAY)
+
+// --- Retracement Levels (Reaction Zones) ---
+string grpRetrace       = "=== Retracement Levels ==="
+bool   showRetracements = input.bool(true, "Show Retracements", group=grpRetrace, tooltip="Master toggle", display=INPUT_DISPLAY)
+
+bool  show236   = input.bool(false, "0.236 - Reaction zone in strong trends", inline="r1", group=grpRetrace, display=INPUT_DISPLAY)
+color color236  = input.color(color.gray, "", inline="r1", group=grpRetrace, display=INPUT_DISPLAY)
+
+bool  show382   = input.bool(false, "0.382 - First meaningful corrective reaction", inline="r2", group=grpRetrace, display=INPUT_DISPLAY)
+color color382  = input.color(color.gray, "", inline="r2", group=grpRetrace, display=INPUT_DISPLAY)
+
+bool  show500   = input.bool(false, "0.500 - Balance and hesitation zone", inline="r3", group=grpRetrace, display=INPUT_DISPLAY)
+color color500  = input.color(color.gray, "", inline="r3", group=grpRetrace, display=INPUT_DISPLAY)
+
+bool  show618   = input.bool(true, "0.618 - Key decision level", inline="r4", group=grpRetrace, display=INPUT_DISPLAY)
+color color618  = input.color(color.red, "", inline="r4", group=grpRetrace, display=INPUT_DISPLAY)
+
+bool  show786   = input.bool(false, "0.786 - Deep retracement", inline="r5", group=grpRetrace, display=INPUT_DISPLAY)
+color color786  = input.color(color.gray, "", inline="r5", group=grpRetrace, display=INPUT_DISPLAY)
+
+string retracementLineStyle = input.string("Solid", "Retracement Line Style", options=["Solid", "Dashed", "Dotted"], group=grpRetrace, display=INPUT_DISPLAY)
+
+// --- Structural Anchors ---
+string grpAnchors = "=== Structural Anchors ==="
+bool   show000    = input.bool(false, "0.000 - Origin of the move", group=grpAnchors, display=INPUT_DISPLAY)
+color  color000   = input.color(color.gray, "0.000 Color", group=grpAnchors, display=INPUT_DISPLAY)
+bool   show1000   = input.bool(false, "1.000 - Full retrace (Structural reset)", group=grpAnchors, display=INPUT_DISPLAY)
+color  color1000  = input.color(color.gray, "1.000 Color", group=grpAnchors, display=INPUT_DISPLAY)
+
+// --- Extension Levels ---
+string grpExtend      = "=== Extension Levels ==="
+bool   showExtensions = input.bool(true, "Show Extensions", group=grpExtend, tooltip="Master toggle", display=INPUT_DISPLAY)
+
+bool  show1272  = input.bool(false, "1.272", inline="e1", group=grpExtend, display=INPUT_DISPLAY)
+color color1272 = input.color(color.black, "", inline="e1", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show1414  = input.bool(false, "1.414", inline="e2", group=grpExtend, display=INPUT_DISPLAY)
+color color1414 = input.color(color.black, "", inline="e2", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show1618  = input.bool(true, "1.618", inline="e3", group=grpExtend, display=INPUT_DISPLAY)
+color color1618 = input.color(color.black, "", inline="e3", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show2000  = input.bool(false, "2.000", inline="e4", group=grpExtend, display=INPUT_DISPLAY)
+color color2000 = input.color(color.black, "", inline="e4", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show2272  = input.bool(false, "2.272", inline="e5", group=grpExtend, display=INPUT_DISPLAY)
+color color2272 = input.color(color.black, "", inline="e5", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show2414  = input.bool(false, "2.414", inline="e6", group=grpExtend, display=INPUT_DISPLAY)
+color color2414 = input.color(color.black, "", inline="e6", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show2618  = input.bool(true, "2.618", inline="e7", group=grpExtend, display=INPUT_DISPLAY)
+color color2618 = input.color(color.black, "", inline="e7", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show3000  = input.bool(false, "3.000", inline="e8", group=grpExtend, display=INPUT_DISPLAY)
+color color3000 = input.color(color.black, "", inline="e8", group=grpExtend, display=INPUT_DISPLAY)
+
+bool  show3618  = input.bool(false, "3.618", inline="e9", group=grpExtend, display=INPUT_DISPLAY)
+color color3618 = input.color(color.black, "", inline="e9", group=grpExtend, display=INPUT_DISPLAY)
+
+string extensionLineStyle = input.string("Solid", "Extension Line Style", options=["Solid", "Dashed", "Dotted"], group=grpExtend, display=INPUT_DISPLAY)
+
+// --- Golden Zone and Pocket (as boxes) ---
+string grpGolden = "=== Golden Zone and Pocket ==="
+
+bool  showGoldenZone    = input.bool(true, "Show Golden Zone (0.618 to 0.786)", group=grpGolden, display=INPUT_DISPLAY)
+color goldenZoneColor   = input.color(color.orange, "Golden Zone Color", group=grpGolden, display=INPUT_DISPLAY)
+int   goldenZoneOpacity = input.int(88, "Golden Zone Opacity (0-100)", minval=0, maxval=100, group=grpGolden, display=INPUT_DISPLAY)
+color goldenZoneBorder  = input.color(color.orange, "Golden Zone Border", group=grpGolden, display=INPUT_DISPLAY)
+int   goldenZoneBorderW = input.int(1, "Golden Zone Border Width", minval=0, maxval=4, group=grpGolden, display=INPUT_DISPLAY)
+
+bool  showGoldenPocket    = input.bool(true, "Show Golden Pocket (0.618 to 0.650)", group=grpGolden, display=INPUT_DISPLAY)
+color goldenPocketColor   = input.color(color.red, "Golden Pocket Color", group=grpGolden, display=INPUT_DISPLAY)
+int   goldenPocketOpacity = input.int(82, "Golden Pocket Opacity (0-100)", minval=0, maxval=100, group=grpGolden, display=INPUT_DISPLAY)
+color goldenPocketBorder  = input.color(color.red, "Golden Pocket Border", group=grpGolden, display=INPUT_DISPLAY)
+int   goldenPocketBorderW = input.int(1, "Golden Pocket Border Width", minval=0, maxval=4, group=grpGolden, display=INPUT_DISPLAY)
+float pocketUpperRatio    = input.float(0.65, "Pocket Upper Ratio", minval=0.0, maxval=1.0, step=0.001, group=grpGolden, display=INPUT_DISPLAY)
+
+int zoneExtendBars = input.int(FUTURE_BARS, "Zone Right Extension (bars)", minval=0, maxval=500, group=grpGolden, display=INPUT_DISPLAY)
+
+// --- Elliott Wave Labels ---
+string grpWave          = "=== Elliott Wave Labels ==="
+bool   showWaveLabels   = input.bool(false, "Show Wave Count Labels", group=grpWave, display=INPUT_DISPLAY)
+string waveLabelSize    = input.string("Normal", "Label Size", options=["Tiny", "Small", "Normal", "Large"], group=grpWave, display=INPUT_DISPLAY)
+string waveDegree       = input.string("Intermediate", "Wave Degree", options=["Minuette", "Minute", "Minor", "Intermediate", "Primary"], group=grpWave, display=INPUT_DISPLAY)
+color  waveColorBullish = input.color(color.lime, "Bullish Wave Color", group=grpWave, display=INPUT_DISPLAY)
+color  waveColorBearish = input.color(color.red, "Bearish Wave Color", group=grpWave, display=INPUT_DISPLAY)
+
+// --- Broadening Formation ---
+string grpBroadening       = "=== Broadening Formation ==="
+bool   showBroadening      = input.bool(true, "Detect Broadening Formations", group=grpBroadening, display=INPUT_DISPLAY)
+int    broadeningMinSwings = input.int(5, "Minimum Swing Points", minval=3, maxval=10, group=grpBroadening, display=INPUT_DISPLAY)
+color  broadeningColor     = input.color(color.new(color.orange, 70), "Formation Color", group=grpBroadening, display=INPUT_DISPLAY)
+int    broadeningLineWidth = input.int(2, "Trendline Width", minval=1, maxval=3, group=grpBroadening, display=INPUT_DISPLAY)
+bool   showBroadeningLabel = input.bool(true, "Show Formation Label", group=grpBroadening, display=INPUT_DISPLAY)
+
+// --- Rules and Targets ---
+string grpRules        = "=== Rules and Targets ==="
+bool   showRuleTable   = input.bool(true, "Show Rule Table", group=grpRules, display=INPUT_DISPLAY)
+bool   invalidateOn786 = input.bool(true, "Invalidate Fib if breaks 0.786", group=grpRules, display=INPUT_DISPLAY)
+string invalidateMode  = input.string("Close", "0.786 Break Uses", options=["Close", "Wick"], group=grpRules, display=INPUT_DISPLAY)
+bool   autoReanchor    = input.bool(true, "Auto Re-anchor After Invalidation", group=grpRules, display=INPUT_DISPLAY)
+
+// --- Projection Paths ---
+string grpProjection       = "=== Projection Paths ==="
+bool   showProjection      = input.bool(true, "Show Projection Paths", group=grpProjection, display=INPUT_DISPLAY, tooltip="Draw curved paths showing potential price targets")
+bool   projectionCurved    = input.bool(true, "Use Curved Paths", group=grpProjection, display=INPUT_DISPLAY)
+bool   showDualPaths       = input.bool(true, "Show Both Bull & Bear Paths", group=grpProjection, display=INPUT_DISPLAY, tooltip="Display both bullish and bearish scenarios simultaneously")
+color  projectionBullColor = input.color(color.new(color.lime, 50), "Bullish Path Color", group=grpProjection, display=INPUT_DISPLAY)
+color  projectionBearColor = input.color(color.new(color.red, 50), "Bearish Path Color", group=grpProjection, display=INPUT_DISPLAY)
+int    projectionWidth     = input.int(2, "Path Line Width", minval=1, maxval=4, group=grpProjection, display=INPUT_DISPLAY)
+bool   projectionFill      = input.bool(true, "Fill Path Area", group=grpProjection, display=INPUT_DISPLAY)
+int    projectionFillAlpha = input.int(90, "Fill Opacity (0-100)", minval=0, maxval=100, group=grpProjection, display=INPUT_DISPLAY)
+int    projectionBars      = input.int(30, "Projection Length (bars)", minval=5, maxval=100, group=grpProjection, display=INPUT_DISPLAY)
+bool   showCountdown       = input.bool(true, "Show Countdown to Target", group=grpProjection, display=INPUT_DISPLAY)
+
+// --- Bar Coloring ---
+string grpBarColor       = "=== Bar Coloring ==="
+bool   enableBarColor    = input.bool(true, "Enable State-Based Bar Coloring", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorPocket    = input.color(color.new(color.green, 30), "In Pocket Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorContinue  = input.color(color.new(color.lime, 40), "Continuation Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorPullback  = input.color(color.new(color.yellow, 40), "Pullback Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorFailed    = input.color(color.new(color.red, 30), "Failed Pocket Color", group=grpBarColor, display=INPUT_DISPLAY)
+color  barColorReset     = input.color(color.new(color.gray, 50), "Reset/Invalidated Color", group=grpBarColor, display=INPUT_DISPLAY)
+
+// --- Risk/Reward Visualization ---
+string grpRiskReward     = "=== Risk/Reward Visualization ==="
+bool   showRiskReward    = input.bool(true, "Show Risk/Reward Box", group=grpRiskReward, display=INPUT_DISPLAY)
+color  rrEntryColor      = input.color(color.new(color.blue, 70), "Entry Zone Color", group=grpRiskReward, display=INPUT_DISPLAY)
+color  rrTargetColor     = input.color(color.new(color.green, 70), "Target Zone Color", group=grpRiskReward, display=INPUT_DISPLAY)
+color  rrStopColor       = input.color(color.new(color.red, 70), "Stop Zone Color", group=grpRiskReward, display=INPUT_DISPLAY)
+int    rrBorderWidth     = input.int(1, "Box Border Width", minval=0, maxval=3, group=grpRiskReward, display=INPUT_DISPLAY)
+
+// --- Trend Arrows ---
+string grpArrows         = "=== Trend Arrows ==="
+bool   showTrendArrows   = input.bool(true, "Show Trend Arrows at Pivots", group=grpArrows, display=INPUT_DISPLAY)
+color  arrowBullColor    = input.color(color.lime, "Bullish Arrow Color", group=grpArrows, display=INPUT_DISPLAY)
+color  arrowBearColor    = input.color(color.red, "Bearish Arrow Color", group=grpArrows, display=INPUT_DISPLAY)
+
+// --- Historical Markers ---
+string grpHistorical     = "=== Historical Markers ==="
+bool   showHistMarkers   = input.bool(true, "Show Historical Pivot Markers", group=grpHistorical, display=INPUT_DISPLAY)
+color  histHighColor     = input.color(color.new(color.aqua, 50), "Pivot High Marker Color", group=grpHistorical, display=INPUT_DISPLAY)
+color  histLowColor      = input.color(color.new(color.orange, 50), "Pivot Low Marker Color", group=grpHistorical, display=INPUT_DISPLAY)
+string histMarkerSize    = input.string("Tiny", "Marker Size", options=["Tiny", "Small", "Normal"], group=grpHistorical, display=INPUT_DISPLAY)
+
+// --- Options Zones ---
+string grpZones        = "=== Options Zones ==="
+bool   showTargetZones = input.bool(true, "Show Target Zones", group=grpZones, display=INPUT_DISPLAY)
+int    zoneAtrLen      = input.int(14, "ATR Length", minval=1, group=grpZones, display=INPUT_DISPLAY)
+float  zoneAtrMult     = input.float(0.30, "Zone Width (ATR Mult)", minval=0.0, step=0.05, group=grpZones, display=INPUT_DISPLAY)
+bool   showStrikeHints = input.bool(true, "Show Strike Hints", group=grpZones, display=INPUT_DISPLAY)
+float  strikeStep      = input.float(1.0, "Strike Step", minval=0.01, step=0.01, group=grpZones, display=INPUT_DISPLAY)
+
+// --- Formatting: Tables ---
+string grpFmtTables       = "=== Formatting: Tables ==="
+string tblPosInfo         = input.string("Top Right", "Info Table Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpFmtTables, display=INPUT_DISPLAY)
+string tblPosRules        = input.string("Top Left", "Rule Table Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group=grpFmtTables, display=INPUT_DISPLAY)
+int    tblBgOpacity       = input.int(80, "Table Background Opacity (0-100)", minval=0, maxval=100, group=grpFmtTables, display=INPUT_DISPLAY)
+int    tblBorderOpacity   = input.int(60, "Table Border Opacity (0-100)", minval=0, maxval=100, group=grpFmtTables, display=INPUT_DISPLAY)
+int    tblBorderW         = input.int(1, "Table Border Width", minval=0, maxval=4, group=grpFmtTables, display=INPUT_DISPLAY)
+string tblHeaderSize      = input.string("Normal", "Header Text Size", options=["Tiny", "Small", "Normal", "Large"], group=grpFmtTables, display=INPUT_DISPLAY)
+string tblBodySize        = input.string("Tiny", "Body Text Size", options=["Tiny", "Small", "Normal", "Large"], group=grpFmtTables, display=INPUT_DISPLAY)
+int    tblHeaderBgOpacity = input.int(20, "Header Cell Background Opacity (0-100)", minval=0, maxval=100, group=grpFmtTables, display=INPUT_DISPLAY)
+
+// ============================================================================
+// SECTION 2: TYPE DEFINITIONS
+// ============================================================================
+type FibLevel
+    float ratio
+    color col
+    bool  show
+    bool  isExtension
+
+// ============================================================================
+// SECTION 3: GLOBAL VARIABLES
+// ============================================================================
+
+// Pivot tracking
+var float lastPivotHigh    = na
+var float lastPivotLow     = na
+var int   lastPivotHighBar = na
+var int   lastPivotLowBar  = na
+
+var float prevPivotHigh    = na
+var float prevPivotLow     = na
+var int   prevPivotHighBar = na
+var int   prevPivotLowBar  = na
+
+// Track last drawn state
+var int lastDrawnHighBar     = na
+var int lastDrawnLowBar      = na
+var int lastDrawnPrevHighBar = na
+var int lastDrawnPrevLowBar  = na
+
+// Drawing arrays: Fib Set 1
+var array<line>  fib1Lines  = array.new<line>()
+var array<label> fib1Labels = array.new<label>()
+var array<box>   fib1Zones  = array.new<box>()
+
+// Drawing arrays: Fib Set 2
+var array<line>  fib2Lines  = array.new<line>()
+var array<label> fib2Labels = array.new<label>()
+var array<box>   fib2Zones  = array.new<box>()
+
+
+// Wave labels
+var int   waveCount      = 1
+var bool  lastWasBullish = true
+var array<label> waveLabels = array.new<label>()
+
+// Broadening tracking
+var array<line>  broadeningLines  = array.new<line>()
+var array<label> broadeningLabels = array.new<label>()
+var array<float> recentHighs      = array.new<float>()
+var array<int>   recentHighBars   = array.new<int>()
+var array<float> recentLows       = array.new<float>()
+var array<int>   recentLowBars    = array.new<int>()
+var bool lastBroadeningState      = false
+var int  lastBroadeningUpdateBar  = -1
+
+// Projection path polylines
+var array<polyline> projectionPaths = array.new<polyline>()
+var array<label>    projectionLabels = array.new<label>()
+
+// Risk/Reward boxes
+var array<box>   rrBoxes  = array.new<box>()
+var array<label> rrLabels = array.new<label>()
+
+// Linefill for golden zone
+var array<linefill> goldenLinefills = array.new<linefill>()
+var line goldenLine618 = na
+var line goldenLine786 = na
+
+// Trend arrow tracking
+var int lastArrowBar = -1
+
+// Active Fib1 anchors and state
+var float fib1ActiveHigh     = na
+var float fib1ActiveLow      = na
+var int   fib1ActiveStartBar = na
+var bool  fib1Invalidated    = false
+var int   fib1InvalidatedBar = na
+var bool  fib1PocketTouched  = false
+
+// Signal state
+var string fib1State = "NONE"
+
+// Tables - initialized on first bar
+var table infoTable = na
+var table ruleTable = na
+
+// ============================================================================
+// SECTION 4: UTILITY FUNCTIONS
+// ============================================================================
+clampInt(int v, int lo, int hi) =>
+    math.min(math.max(v, lo), hi)
+
+clampFloat(float v, float lo, float hi) =>
+    math.min(math.max(v, lo), hi)
+
+sizeFromStr(string s) =>
+    s == "Tiny" ? size.tiny : s == "Small" ? size.small : s == "Normal" ? size.normal : size.large
+
+posFromStr(string s) =>
+    s == "Top Right" ? position.top_right :
+     s == "Top Left" ? position.top_left :
+     s == "Bottom Right" ? position.bottom_right : position.bottom_left
+
+lineStyleFromStr(string s) =>
+    s == "Dashed" ? line.style_dashed :
+     s == "Dotted" ? line.style_dotted :
+     line.style_solid
+
+fibPrice(float hi, float lo, float ratio) =>
+    float baseLow  = math.min(hi, lo)
+    float baseHigh = math.max(hi, lo)
+    float r = baseHigh - baseLow
+    baseLow + r * ratio
+
+roundToStep(float price, float step) =>
+    step <= 0 ? price : math.round(price / step) * step
+
+// Build array of Fibonacci levels based on user toggles
+buildFibLevels() =>
+    array<FibLevel> levels = array.new<FibLevel>()
+
+    if show000
+        levels.push(FibLevel.new(0.0, color000, true, false))
+
+    if showRetracements
+        if show236
+            levels.push(FibLevel.new(0.236, color236, true, false))
+        if show382
+            levels.push(FibLevel.new(0.382, color382, true, false))
+        if show500
+            levels.push(FibLevel.new(0.5, color500, true, false))
+        if show618
+            levels.push(FibLevel.new(0.618, color618, true, false))
+        if show786
+            levels.push(FibLevel.new(0.786, color786, true, false))
+
+    if show1000
+        levels.push(FibLevel.new(1.0, color1000, true, false))
+
+    if showExtensions
+        if show1272
+            levels.push(FibLevel.new(1.272, color1272, true, true))
+        if show1414
+            levels.push(FibLevel.new(1.414, color1414, true, true))
+        if show1618
+            levels.push(FibLevel.new(1.618, color1618, true, true))
+        if show2000
+            levels.push(FibLevel.new(2.0, color2000, true, true))
+        if show2272
+            levels.push(FibLevel.new(2.272, color2272, true, true))
+        if show2414
+            levels.push(FibLevel.new(2.414, color2414, true, true))
+        if show2618
+            levels.push(FibLevel.new(2.618, color2618, true, true))
+        if show3000
+            levels.push(FibLevel.new(3.0, color3000, true, true))
+        if show3618
+            levels.push(FibLevel.new(3.618, color3618, true, true))
+
+    levels
+
+clearFibSet(array<line> lines, array<label> labels, array<box> boxes) =>
+    while lines.size() > 0
+        line.delete(lines.shift())
+    while labels.size() > 0
+        label.delete(labels.shift())
+    while boxes.size() > 0
+        box.delete(boxes.shift())
+
+drawFibSet(float fibHigh, float fibLow, int lineWidth, bool showLabels,
+           array<line> linesArr, array<label> labelsArr, array<box> boxesArr,
+           int pivotBar, string labelSizeStr) =>
+
+    if not na(fibHigh) and not na(fibLow) and fibHigh != fibLow
+        array<FibLevel> levels = buildFibLevels()
+
+        float baseLow  = math.min(fibHigh, fibLow)
+        float baseHigh = math.max(fibHigh, fibLow)
+        float fibRange = baseHigh - baseLow
+
+        int startBar = not na(pivotBar) ? pivotBar : bar_index - DEFAULT_LOOKBACK
+        int endBar   = bar_index + zoneExtendBars
+
+        // Golden Zone (0.618 to 0.786) as box
+        if showGoldenZone
+            float z1 = baseLow + fibRange * 0.618
+            float z2 = baseLow + fibRange * 0.786
+            float zTop = math.max(z1, z2)
+            float zBot = math.min(z1, z2)
+            int zTransp = clampInt(goldenZoneOpacity, 0, 100)
+            color zFill = color.new(goldenZoneColor, zTransp)
+
+            box zoneBox = box.new(
+                 startBar, zTop, endBar, zBot,
+                 border_color=goldenZoneBorder,
+                 border_width=goldenZoneBorderW,
+                 bgcolor=zFill
+            )
+            boxesArr.push(zoneBox)
+
+        // Golden Pocket (0.618 to pocketUpperRatio) as box
+        if showGoldenPocket
+            float pUpper = clampFloat(pocketUpperRatio, 0.0, 1.0)
+            float p1 = baseLow + fibRange * 0.618
+            float p2 = baseLow + fibRange * pUpper
+            float pTop = math.max(p1, p2)
+            float pBot = math.min(p1, p2)
+            int pTransp = clampInt(goldenPocketOpacity, 0, 100)
+            color pFill = color.new(goldenPocketColor, pTransp)
+
+            box pocketBox = box.new(
+                 startBar, pTop, endBar, pBot,
+                 border_color=goldenPocketBorder,
+                 border_width=goldenPocketBorderW,
+                 bgcolor=pFill
+            )
+            boxesArr.push(pocketBox)
+
+        // Draw all selected Fibonacci levels using v6 for...in syntax
+        if levels.size() > 0
+            for lvl in levels
+                float price = baseLow + fibRange * lvl.ratio
+                color lineColor = lvl.col
+
+                string lineStyle = lvl.isExtension ? extensionLineStyle : retracementLineStyle
+                line.style lineStyleToUse = lineStyleFromStr(lineStyle)
+
+                line fibLine = line.new(
+                     startBar, price, endBar, price,
+                     color=lineColor,
+                     width=lineWidth,
+                     style=lineStyleToUse,
+                     extend=extend.right
+                )
+                linesArr.push(fibLine)
+
+                if showLabels
+                    string.size labelSizeValue = sizeFromStr(labelSizeStr)
+                    // Include actual price in label for key decision levels
+                    string labelText = str.tostring(lvl.ratio, "#.###") + " │ " + str.tostring(price, format.mintick)
+                    label fibLabel = label.new(
+                         startBar - 2, price, labelText,
+                         style=label.style_none,
+                         color=color.new(color.black, 100),
+                         textcolor=lineColor,
+                         size=labelSizeValue,
+                         textalign=text.align_right
+                    )
+                    labelsArr.push(fibLabel)
+
+
+// ============================================================================
+// SECTION 5: TABLE INITIALIZATION (v6 compliant - on first bar)
+// ============================================================================
+if barstate.isfirst
+    color bgT  = color.new(color.black, clampInt(tblBgOpacity, 0, 100))
+    color brdT = color.new(color.gray, clampInt(tblBorderOpacity, 0, 100))
+
+    infoTable := table.new(posFromStr(tblPosInfo), 2, 6, bgcolor=bgT, border_color=brdT, border_width=tblBorderW)
+    ruleTable := table.new(posFromStr(tblPosRules), 4, 6, bgcolor=bgT, border_color=brdT, border_width=tblBorderW)
+
+// ============================================================================
+// SECTION 6: PIVOT DETECTION
+// ============================================================================
+pivotHigh = ta.pivothigh(high, pivotLen, pivotLen)
+pivotLow  = ta.pivotlow(low, pivotLen, pivotLen)
+
+newPivotHigh = not na(pivotHigh)
+if newPivotHigh
+    prevPivotHigh    := lastPivotHigh
+    prevPivotHighBar := lastPivotHighBar
+    lastPivotHigh    := pivotHigh
+    lastPivotHighBar := bar_index - pivotLen
+
+newPivotLow = not na(pivotLow)
+if newPivotLow
+    prevPivotLow    := lastPivotLow
+    prevPivotLowBar := lastPivotLowBar
+    lastPivotLow    := pivotLow
+    lastPivotLowBar := bar_index - pivotLen
+
+// ============================================================================
+// BROADENING FORMATION DETECTION
+// ============================================================================
+if showBroadening
+    if newPivotHigh
+        recentHighs.push(lastPivotHigh)
+        recentHighBars.push(lastPivotHighBar)
+        if recentHighs.size() > broadeningMinSwings
+            recentHighs.shift()
+            recentHighBars.shift()
+
+    if newPivotLow
+        recentLows.push(lastPivotLow)
+        recentLowBars.push(lastPivotLowBar)
+        if recentLows.size() > broadeningMinSwings
+            recentLows.shift()
+            recentLowBars.shift()
+
+    if barstate.islast and recentHighs.size() >= 3 and recentLows.size() >= 3
+        float firstHigh = recentHighs.get(0)
+        float lastHighV = recentHighs.get(recentHighs.size() - 1)
+        float firstLow  = recentLows.get(0)
+        float lastLowV  = recentLows.get(recentLows.size() - 1)
+
+        bool isExpanding   = lastHighV > firstHigh and lastLowV < firstLow
+        bool stateChanged  = isExpanding != lastBroadeningState
+        bool pivotsUpdated = (newPivotHigh or newPivotLow) and lastBroadeningUpdateBar != bar_index
+
+        if (stateChanged or pivotsUpdated) and isExpanding
+            while broadeningLines.size() > 0
+                line.delete(broadeningLines.shift())
+            while broadeningLabels.size() > 0
+                label.delete(broadeningLabels.shift())
+
+            int firstHighBar = recentHighBars.get(0)
+            int lastHighBarV = recentHighBars.get(recentHighBars.size() - 1)
+            line upperLine = line.new(firstHighBar, firstHigh, lastHighBarV, lastHighV,
+                 color=broadeningColor, width=broadeningLineWidth, extend=extend.right)
+            broadeningLines.push(upperLine)
+
+            int firstLowBar = recentLowBars.get(0)
+            int lastLowBarV = recentLowBars.get(recentLowBars.size() - 1)
+            line lowerLine = line.new(firstLowBar, firstLow, lastLowBarV, lastLowV,
+                 color=broadeningColor, width=broadeningLineWidth, extend=extend.right)
+            broadeningLines.push(lowerLine)
+
+            if showBroadeningLabel
+                float midPrice = (lastHighV + lastLowV) / 2.0
+                label formLabel = label.new(bar_index, midPrice, "Broadening",
+                     style=label.style_none, color=color.new(color.black, 100),
+                     textcolor=broadeningColor, size=size.normal)
+                broadeningLabels.push(formLabel)
+
+            lastBroadeningState := isExpanding
+            lastBroadeningUpdateBar := bar_index
+        else if not isExpanding and lastBroadeningState
+            while broadeningLines.size() > 0
+                line.delete(broadeningLines.shift())
+            while broadeningLabels.size() > 0
+                label.delete(broadeningLabels.shift())
+            lastBroadeningState := false
+
+// ============================================================================
+// ELLIOTT WAVE LABELING (Simplified - see header note for limitations)
+// ============================================================================
+if showWaveLabels
+    string.size labelSizeValue = sizeFromStr(waveLabelSize)
+
+    if newPivotHigh
+        bool isBullish = na(prevPivotLow) or (not na(prevPivotHigh) and lastPivotHigh > prevPivotHigh)
+        if isBullish != lastWasBullish
+            waveCount := 1
+            lastWasBullish := isBullish
+
+        string waveText = waveDegree == "Intermediate" ? "(" + str.tostring(waveCount) + ")" :
+                          waveDegree == "Primary" ? "((" + str.tostring(waveCount) + "))" :
+                          str.tostring(waveCount)
+
+        label waveLabel = label.new(
+             lastPivotHighBar, lastPivotHigh, waveText,
+             style=label.style_label_down,
+             color=color.new(isBullish ? waveColorBullish : waveColorBearish, 70),
+             textcolor=isBullish ? waveColorBullish : waveColorBearish,
+             size=labelSizeValue
+        )
+        waveLabels.push(waveLabel)
+        waveCount := waveCount < 5 ? waveCount + 1 : 1
+
+    if newPivotLow
+        bool isBullish = na(prevPivotHigh) or (not na(prevPivotLow) and lastPivotLow < prevPivotLow)
+
+        string waveText = waveDegree == "Intermediate" ? "(" + str.tostring(waveCount) + ")" :
+                          waveDegree == "Primary" ? "((" + str.tostring(waveCount) + "))" :
+                          str.tostring(waveCount)
+
+        label waveLabel = label.new(
+             lastPivotLowBar, lastPivotLow, waveText,
+             style=label.style_label_up,
+             color=color.new(isBullish ? waveColorBullish : waveColorBearish, 70),
+             textcolor=isBullish ? waveColorBullish : waveColorBearish,
+             size=labelSizeValue
+        )
+        waveLabels.push(waveLabel)
+
+if waveLabels.size() > 20
+    label.delete(waveLabels.shift())
+
+
+// ============================================================================
+// FIB 1 STATE, INVALIDATION, AUTO RE-ANCHOR, DRAW
+// ============================================================================
+atrZ = ta.atr(zoneAtrLen)
+w    = atrZ * zoneAtrMult
+
+if barstate.islast
+    float fib1High = na
+    float fib1Low  = na
+    int   fib1StartBar = bar_index - DEFAULT_LOOKBACK
+
+    if fib1Mode == "Auto (Pivots)"
+        fib1High := lastPivotHigh
+        fib1Low  := lastPivotLow
+        fib1StartBar := not na(lastPivotHighBar) ? lastPivotHighBar : bar_index - DEFAULT_LOOKBACK
+    else
+        fib1High := fib1ManualHigh
+        fib1Low  := fib1ManualLow
+        fib1StartBar := bar_index - DEFAULT_LOOKBACK
+
+    fib1ActiveHigh := fib1High
+    fib1ActiveLow  := fib1Low
+    fib1ActiveStartBar := fib1StartBar
+
+    bool haveFib1 = not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+
+    // Determine impulse direction based on pivot sequence
+    int impulseDir = 0
+    if fib1Mode == "Auto (Pivots)" and not na(lastPivotHighBar) and not na(lastPivotLowBar)
+        // If low formed before high, impulse is upward (1); if high formed first, downward (-1)
+        impulseDir := lastPivotLowBar < lastPivotHighBar ? 1 : -1
+
+    float p618 = haveFib1 ? fibPrice(fib1ActiveHigh, fib1ActiveLow, 0.618) : na
+    float p650 = haveFib1 ? fibPrice(fib1ActiveHigh, fib1ActiveLow, clampFloat(pocketUpperRatio, 0.0, 1.0)) : na
+    float p786 = haveFib1 ? fibPrice(fib1ActiveHigh, fib1ActiveLow, 0.786) : na
+
+    float pocketTop = haveFib1 ? math.max(p618, p650) : na
+    float pocketBot = haveFib1 ? math.min(p618, p650) : na
+
+    bool inPocket = haveFib1 ? (close >= pocketBot and close <= pocketTop) : false
+    if inPocket
+        fib1PocketTouched := true
+
+    bool broke786 = false
+    if haveFib1 and invalidateOn786
+        if impulseDir == -1
+            broke786 := invalidateMode == "Close" ? close > p786 : high > p786
+        else
+            broke786 := invalidateMode == "Close" ? close < p786 : low < p786
+
+    bool anchorsAfterInvalidation = true
+    if autoReanchor and fib1Invalidated and not na(fib1InvalidatedBar) and fib1Mode == "Auto (Pivots)"
+        anchorsAfterInvalidation := (not na(lastPivotHighBar) and not na(lastPivotLowBar) and lastPivotHighBar > fib1InvalidatedBar and lastPivotLowBar > fib1InvalidatedBar)
+
+    if haveFib1 and invalidateOn786 and broke786 and not fib1Invalidated
+        fib1Invalidated := true
+        fib1InvalidatedBar := bar_index
+        fib1State := "RESET"
+        fib1PocketTouched := false
+        clearFibSet(fib1Lines, fib1Labels, fib1Zones)
+
+    if fib1Invalidated and autoReanchor and anchorsAfterInvalidation
+        fib1Invalidated := false
+        fib1PocketTouched := false
+        lastDrawnHighBar := na
+        lastDrawnLowBar  := na
+
+    if not haveFib1
+        fib1State := "NONE"
+    else if fib1Invalidated
+        fib1State := "RESET"
+    else
+        bool impulseUp = impulseDir >= 0
+        bool above618 = impulseUp ? close >= p618 : close <= p618
+        bool failedPocket = fib1PocketTouched and (impulseUp ? close < p618 : close > p618)
+
+        if inPocket
+            fib1State := "IN_POCKET"
+        else if failedPocket
+            fib1State := "FAILED_POCKET"
+        else if above618
+            fib1State := "CONTINUATION"
+        else
+            fib1State := "PULLBACK"
+
+    bool fib1Changed = (lastDrawnHighBar != lastPivotHighBar or lastDrawnLowBar != lastPivotLowBar or na(lastDrawnHighBar))
+    if fib1Enabled and haveFib1 and not fib1Invalidated and fib1Changed
+        clearFibSet(fib1Lines, fib1Labels, fib1Zones)
+        drawFibSet(fib1ActiveHigh, fib1ActiveLow, fib1LineWidth, fib1ShowLabels,
+                   fib1Lines, fib1Labels, fib1Zones,
+                   fib1ActiveStartBar, fib1LabelSize)
+        lastDrawnHighBar := lastPivotHighBar
+        lastDrawnLowBar  := lastPivotLowBar
+
+// ============================================================================
+// FIB SET 2 DRAW
+// ============================================================================
+if barstate.islast
+    bool fib2Changed = (lastDrawnPrevHighBar != prevPivotHighBar or lastDrawnPrevLowBar != prevPivotLowBar or na(lastDrawnPrevHighBar))
+
+    if fib2Enabled and fib2Changed
+        clearFibSet(fib2Lines, fib2Labels, fib2Zones)
+
+        float fib2High = na
+        float fib2Low  = na
+        int fib2StartBar = bar_index - 150
+
+        if fib2Mode == "Auto (Pivots)"
+            fib2High := prevPivotHigh
+            fib2Low  := prevPivotLow
+            fib2StartBar := not na(prevPivotHighBar) ? prevPivotHighBar : bar_index - 150
+        else
+            fib2High := fib2ManualHigh
+            fib2Low  := fib2ManualLow
+
+        if not na(fib2High) and not na(fib2Low) and fib2High != fib2Low
+            drawFibSet(fib2High, fib2Low, fib2LineWidth, fib2ShowLabels,
+                       fib2Lines, fib2Labels, fib2Zones,
+                       fib2StartBar, fib2LabelSize)
+
+        lastDrawnPrevHighBar := prevPivotHighBar
+        lastDrawnPrevLowBar  := prevPivotLowBar
+
+// ============================================================================
+// PROJECTION PATHS (v6 polylines for price forecasting)
+// ============================================================================
+if barstate.islast and showProjection and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    // Clear previous projections
+    while projectionPaths.size() > 0
+        polyline.delete(projectionPaths.shift())
+    while projectionLabels.size() > 0
+        label.delete(projectionLabels.shift())
+
+    // Calculate key levels
+    float baseLow  = math.min(fib1ActiveHigh, fib1ActiveLow)
+    float baseHigh = math.max(fib1ActiveHigh, fib1ActiveLow)
+    float fibRange = baseHigh - baseLow
+
+    // Determine impulse direction
+    int projDir = 0
+    if not na(lastPivotHighBar) and not na(lastPivotLowBar)
+        projDir := lastPivotLowBar < lastPivotHighBar ? 1 : -1
+
+    // Target levels for both directions
+    float bullTarget = baseLow + fibRange * 1.618
+    float bearTarget = baseHigh - fibRange * 0.618
+    float currentPrice = close
+
+    // Intermediate waypoints for curved paths
+    int midBar1 = bar_index + math.round(projectionBars * 0.33)
+    int midBar2 = bar_index + math.round(projectionBars * 0.66)
+    int endBar  = bar_index + projectionBars
+
+    // === BULLISH PROJECTION PATH ===
+    bool drawBullPath = showDualPaths or projDir >= 0
+    if drawBullPath
+        array<chart.point> bullPoints = array.new<chart.point>()
+        bullPoints.push(chart.point.from_index(bar_index, currentPrice))
+
+        float bullMid1 = currentPrice + (bullTarget - currentPrice) * 0.4
+        float bullMid2 = currentPrice + (bullTarget - currentPrice) * 0.75
+        bullPoints.push(chart.point.from_index(midBar1, bullMid1))
+        bullPoints.push(chart.point.from_index(midBar2, bullMid2))
+        bullPoints.push(chart.point.from_index(endBar, bullTarget))
+
+        polyline bullPath = polyline.new(
+             bullPoints,
+             curved=projectionCurved,
+             line_color=projectionBullColor,
+             line_width=projectionWidth,
+             line_style=line.style_dashed
+        )
+        projectionPaths.push(bullPath)
+
+        // Bullish target label with countdown
+        string bullLabelText = "▲ 1.618 Target\n" + str.tostring(bullTarget, format.mintick)
+        if showCountdown
+            bullLabelText := bullLabelText + "\n(" + str.tostring(projectionBars) + " bars)"
+
+        label bullLabel = label.new(
+             endBar, bullTarget, bullLabelText,
+             style=label.style_label_left,
+             color=color.new(projectionBullColor, 70),
+             textcolor=projectionBullColor,
+             size=size.small
+        )
+        projectionLabels.push(bullLabel)
+
+    // === BEARISH PROJECTION PATH ===
+    bool drawBearPath = showDualPaths or projDir < 0
+    if drawBearPath
+        array<chart.point> bearPoints = array.new<chart.point>()
+        bearPoints.push(chart.point.from_index(bar_index, currentPrice))
+
+        float bearMid1 = currentPrice - (currentPrice - bearTarget) * 0.4
+        float bearMid2 = currentPrice - (currentPrice - bearTarget) * 0.75
+        bearPoints.push(chart.point.from_index(midBar1, bearMid1))
+        bearPoints.push(chart.point.from_index(midBar2, bearMid2))
+        bearPoints.push(chart.point.from_index(endBar, bearTarget))
+
+        polyline bearPath = polyline.new(
+             bearPoints,
+             curved=projectionCurved,
+             line_color=projectionBearColor,
+             line_width=projectionWidth,
+             line_style=line.style_dashed
+        )
+        projectionPaths.push(bearPath)
+
+        // Bearish target label with countdown
+        string bearLabelText = "▼ 0.618 Target\n" + str.tostring(bearTarget, format.mintick)
+        if showCountdown
+            bearLabelText := bearLabelText + "\n(" + str.tostring(projectionBars) + " bars)"
+
+        label bearLabel = label.new(
+             endBar, bearTarget, bearLabelText,
+             style=label.style_label_left,
+             color=color.new(projectionBearColor, 70),
+             textcolor=projectionBearColor,
+             size=size.small
+        )
+        projectionLabels.push(bearLabel)
+
+// ============================================================================
+// RISK/REWARD VISUALIZATION
+// ============================================================================
+if barstate.islast and showRiskReward and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    // Clear previous R/R boxes
+    while rrBoxes.size() > 0
+        box.delete(rrBoxes.shift())
+    while rrLabels.size() > 0
+        label.delete(rrLabels.shift())
+
+    float rrBaseLow  = math.min(fib1ActiveHigh, fib1ActiveLow)
+    float rrBaseHigh = math.max(fib1ActiveHigh, fib1ActiveLow)
+    float rrFibRange = rrBaseHigh - rrBaseLow
+
+    // Entry zone: Golden Pocket (0.618 to 0.65)
+    float entryTop = rrBaseLow + rrFibRange * clampFloat(pocketUpperRatio, 0.0, 1.0)
+    float entryBot = rrBaseLow + rrFibRange * 0.618
+
+    // Stop zone: Below 0.786
+    float stopLevel = rrBaseLow + rrFibRange * 0.786
+
+    // Target: 1.618 extension
+    float targetLevel = rrBaseLow + rrFibRange * 1.618
+
+    // Calculate risk/reward ratio
+    float entryMid = (entryTop + entryBot) / 2.0
+    float risk     = math.abs(entryMid - stopLevel)
+    float reward   = math.abs(targetLevel - entryMid)
+    float rrRatio  = risk > 0 ? reward / risk : 0
+
+    int rrStartBar = bar_index
+    int rrEndBar   = bar_index + math.round(projectionBars * 0.5)
+
+    // Entry zone box
+    box entryBox = box.new(
+         rrStartBar, math.max(entryTop, entryBot), rrEndBar, math.min(entryTop, entryBot),
+         border_color=color.blue, border_width=rrBorderWidth, bgcolor=rrEntryColor
+    )
+    rrBoxes.push(entryBox)
+
+    // Stop zone line indicator
+    line stopLine = line.new(
+         rrStartBar, stopLevel, rrEndBar, stopLevel,
+         color=color.red, width=2, style=line.style_dotted
+    )
+
+    // Target zone line indicator
+    line targetLine = line.new(
+         rrStartBar, targetLevel, rrEndBar, targetLevel,
+         color=color.green, width=2, style=line.style_dotted
+    )
+
+    // R:R ratio label
+    string rrText = "R:R = 1:" + str.tostring(rrRatio, "#.##")
+    label rrLabel = label.new(
+         rrEndBar, entryMid, rrText,
+         style=label.style_label_left,
+         color=color.new(color.blue, 80),
+         textcolor=color.white,
+         size=size.small
+    )
+    rrLabels.push(rrLabel)
+
+// ============================================================================
+// LINEFILL FOR GOLDEN ZONE (gradient effect between 0.618-0.786)
+// ============================================================================
+if barstate.islast and showGoldenZone and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    // Clear previous linefills
+    while goldenLinefills.size() > 0
+        linefill.delete(goldenLinefills.shift())
+    if not na(goldenLine618)
+        line.delete(goldenLine618)
+    if not na(goldenLine786)
+        line.delete(goldenLine786)
+
+    float lfBaseLow  = math.min(fib1ActiveHigh, fib1ActiveLow)
+    float lfBaseHigh = math.max(fib1ActiveHigh, fib1ActiveLow)
+    float lfFibRange = lfBaseHigh - lfBaseLow
+
+    float lf618 = lfBaseLow + lfFibRange * 0.618
+    float lf786 = lfBaseLow + lfFibRange * 0.786
+
+    int lfStartBar = not na(fib1ActiveStartBar) ? fib1ActiveStartBar : bar_index - DEFAULT_LOOKBACK
+    int lfEndBar   = bar_index + zoneExtendBars
+
+    // Create invisible lines for linefill anchors
+    goldenLine618 := line.new(lfStartBar, lf618, lfEndBar, lf618, color=color.new(color.orange, 100))
+    goldenLine786 := line.new(lfStartBar, lf786, lfEndBar, lf786, color=color.new(color.orange, 100))
+
+    // Create gradient linefill between the two lines
+    linefill goldenFill = linefill.new(goldenLine618, goldenLine786, color.new(goldenZoneColor, goldenZoneOpacity))
+    goldenLinefills.push(goldenFill)
+
+// ============================================================================
+// SIGNAL OUTPUTS (alerts-friendly)
+// ============================================================================
+alertcondition(fib1State == "IN_POCKET", "Fib1 IN_POCKET", "Fib1 state is IN_POCKET")
+alertcondition(fib1State == "FAILED_POCKET", "Fib1 FAILED_POCKET", "Fib1 state is FAILED_POCKET")
+alertcondition(fib1State == "CONTINUATION", "Fib1 CONTINUATION", "Fib1 state is CONTINUATION")
+alertcondition(fib1State == "RESET", "Fib1 RESET", "Fib1 state is RESET")
+
+// ============================================================================
+// BAR COLORING BY STATE
+// ============================================================================
+color stateBarColor = enableBarColor ? (
+     fib1State == "IN_POCKET" ? barColorPocket :
+     fib1State == "CONTINUATION" ? barColorContinue :
+     fib1State == "PULLBACK" ? barColorPullback :
+     fib1State == "FAILED_POCKET" ? barColorFailed :
+     fib1State == "RESET" ? barColorReset :
+     na
+) : na
+
+barcolor(stateBarColor)
+
+// ============================================================================
+// HISTORICAL PIVOT MARKERS (plotshape)
+// ============================================================================
+string.size histSize = sizeFromStr(histMarkerSize)
+bool isPivotHighBar = not na(pivotHigh)
+bool isPivotLowBar  = not na(pivotLow)
+
+plotshape(showHistMarkers and isPivotHighBar, title="Pivot High Marker",
+     style=shape.diamond, location=location.abovebar,
+     color=histHighColor, size=size.tiny, offset=-pivotLen)
+
+plotshape(showHistMarkers and isPivotLowBar, title="Pivot Low Marker",
+     style=shape.diamond, location=location.belowbar,
+     color=histLowColor, size=size.tiny, offset=-pivotLen)
+
+// ============================================================================
+// TREND ARROWS AT KEY MOMENTS
+// ============================================================================
+// Arrow up when new pivot low forms (potential reversal up)
+// Arrow down when new pivot high forms (potential reversal down)
+int arrowUp   = showTrendArrows and isPivotLowBar ? 1 : 0
+int arrowDown = showTrendArrows and isPivotHighBar ? -1 : 0
+
+plotarrow(arrowUp, title="Bullish Arrow", colorup=arrowBullColor, offset=-pivotLen, maxheight=20)
+plotarrow(arrowDown, title="Bearish Arrow", colordown=arrowBearColor, offset=-pivotLen, maxheight=20)
+
+// ============================================================================
+// TABLES (v6 compliant - using tables initialized on first bar)
+// ============================================================================
+string.size hdrSize  = sizeFromStr(tblHeaderSize)
+string.size bodySize = sizeFromStr(tblBodySize)
+color hdrBg = color.new(#2D2D2D, clampInt(tblHeaderBgOpacity, 0, 100))
+
+// State-based dynamic colors for tables
+color stateTextColor = fib1State == "IN_POCKET" ? color.green :
+     fib1State == "CONTINUATION" ? color.lime :
+     fib1State == "PULLBACK" ? color.yellow :
+     fib1State == "FAILED_POCKET" ? color.red :
+     fib1State == "RESET" ? color.gray :
+     color.white
+
+color stateBgColor = fib1State == "IN_POCKET" ? color.new(color.green, 80) :
+     fib1State == "CONTINUATION" ? color.new(color.lime, 85) :
+     fib1State == "PULLBACK" ? color.new(color.yellow, 85) :
+     fib1State == "FAILED_POCKET" ? color.new(color.red, 80) :
+     fib1State == "RESET" ? color.new(color.gray, 80) :
+     hdrBg
+
+if showInfoTable and barstate.islast and not na(infoTable)
+    // v6 text_formatting for bold headers with state-based colors
+    table.cell(infoTable, 0, 0, "Dragon Detector", text_color=color.yellow, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(infoTable, 1, 0, fib1State, text_color=stateTextColor, text_size=hdrSize, bgcolor=stateBgColor, text_formatting=text.format_bold)
+
+    if fib1Enabled
+        table.cell(infoTable, 0, 1, "Fib 1", text_color=fib1Color, text_size=bodySize, bgcolor=color.new(#2D2D2D, 30))
+        table.cell(infoTable, 1, 1, fib1Mode == "Auto (Pivots)" ? "Auto" : "Manual", text_color=color.silver, text_size=bodySize, bgcolor=color.new(#2D2D2D, 30))
+
+    if fib2Enabled
+        table.cell(infoTable, 0, 2, "Fib 2", text_color=fib2Color, text_size=bodySize, bgcolor=color.new(#2D2D2D, 30))
+        table.cell(infoTable, 1, 2, fib2Mode == "Auto (Pivots)" ? "Auto" : "Manual", text_color=color.silver, text_size=bodySize, bgcolor=color.new(#2D2D2D, 30))
+
+if barstate.islast and showRuleTable and not na(ruleTable) and not na(fib1ActiveHigh) and not na(fib1ActiveLow) and fib1ActiveHigh != fib1ActiveLow
+    float p618R = fibPrice(fib1ActiveHigh, fib1ActiveLow, 0.618)
+    float p650R = fibPrice(fib1ActiveHigh, fib1ActiveLow, clampFloat(pocketUpperRatio, 0.0, 1.0))
+    float p786R = fibPrice(fib1ActiveHigh, fib1ActiveLow, 0.786)
+    float p100R = fibPrice(fib1ActiveHigh, fib1ActiveLow, 1.0)
+
+    string z618 = str.tostring(p618R - w, format.mintick) + " to " + str.tostring(p618R + w, format.mintick)
+    string z786 = str.tostring(p786R - w, format.mintick) + " to " + str.tostring(p786R + w, format.mintick)
+    string z100 = str.tostring(p100R - w, format.mintick) + " to " + str.tostring(p100R + w, format.mintick)
+
+    string s618 = showStrikeHints ? str.tostring(roundToStep(p618R, strikeStep)) : ""
+    string s786 = showStrikeHints ? str.tostring(roundToStep(p786R, strikeStep)) : ""
+    string s100 = showStrikeHints ? str.tostring(roundToStep(p100R, strikeStep)) : ""
+
+    bool inPocketR = close >= math.min(p618R, p650R) and close <= math.max(p618R, p650R)
+
+    // v6 text_formatting for bold headers
+    table.cell(ruleTable, 0, 0, "Rule", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(ruleTable, 1, 0, "State", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(ruleTable, 2, 0, "Zone", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+    table.cell(ruleTable, 3, 0, "Strikes", text_color=color.white, text_size=hdrSize, bgcolor=hdrBg, text_formatting=text.format_bold)
+
+    // Dynamic colors for rule status cells
+    color holdingColor = (fib1State == "CONTINUATION") ? color.lime : color.orange
+    color pocketStatusColor = inPocketR ? color.green : color.silver
+    color validityColor = fib1Invalidated ? color.red : color.lime
+
+    table.cell(ruleTable, 0, 1, "0.618", text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 1, 1, (fib1State == "CONTINUATION") ? "✓ Holding" : "✗ Not Holding", text_color=holdingColor, text_size=bodySize, bgcolor=color.new(holdingColor, 90))
+    table.cell(ruleTable, 2, 1, z618, text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 3, 1, s618, text_color=color.white, text_size=bodySize)
+
+    table.cell(ruleTable, 0, 2, "Pocket", text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 1, 2, inPocketR ? "● Inside" : "○ Outside", text_color=pocketStatusColor, text_size=bodySize, bgcolor=color.new(pocketStatusColor, 90))
+    table.cell(ruleTable, 2, 2, str.tostring(math.min(p618R, p650R), format.mintick) + " to " + str.tostring(math.max(p618R, p650R), format.mintick), text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 3, 2, showStrikeHints ? (str.tostring(roundToStep(math.min(p618R, p650R), strikeStep)) + " / " + str.tostring(roundToStep(math.max(p618R, p650R), strikeStep))) : "", text_color=color.white, text_size=bodySize)
+
+    table.cell(ruleTable, 0, 3, "0.786", text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 1, 3, fib1Invalidated ? "⚠ Invalidated" : "✓ Valid", text_color=validityColor, text_size=bodySize, bgcolor=color.new(validityColor, 90))
+    table.cell(ruleTable, 2, 3, z786, text_color=color.white, text_size=bodySize)
+    table.cell(ruleTable, 3, 3, s786, text_color=color.white, text_size=bodySize)
+
+    if showTargetZones
+        table.cell(ruleTable, 0, 4, "Target 0.786", text_color=color.white, text_size=bodySize)
+        table.cell(ruleTable, 1, 4, "", text_color=color.white, text_size=bodySize)
+        table.cell(ruleTable, 2, 4, z786, text_color=color.white, text_size=bodySize)
+        table.cell(ruleTable, 3, 4, s786, text_color=color.white, text_size=bodySize)
+
+        table.cell(ruleTable, 0, 5, "Target 1.0", text_color=color.white, text_size=bodySize)
+        table.cell(ruleTable, 1, 5, "", text_color=color.white, text_size=bodySize)
+        table.cell(ruleTable, 2, 5, z100, text_color=color.white, text_size=bodySize)
+        table.cell(ruleTable, 3, 5, s100, text_color=color.white, text_size=bodySize)
